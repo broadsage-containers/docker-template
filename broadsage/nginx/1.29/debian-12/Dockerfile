@@ -13,7 +13,7 @@ LABEL com.vmware.cp.artifact.flavor="sha256:c50c90cfd9d12b445b011e6ad529f1ad3dae
       org.opencontainers.image.documentation="https://github.com/bitnami/containers/tree/main/bitnami/nginx/README.md" \
       org.opencontainers.image.source="https://github.com/bitnami/containers/tree/main/bitnami/nginx" \
       org.opencontainers.image.title="nginx" \
-      org.opencontainers.image.vendor="Broadcom, Inc." \
+      org.opencontainers.image.vendor="Broadsage, Inc." \
       org.opencontainers.image.version="1.29.1"
 
 ENV HOME="/" \
