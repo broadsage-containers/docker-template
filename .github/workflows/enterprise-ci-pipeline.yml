@@ -48,10 +48,78 @@ env:
   COSIGN_EXPERIMENTAL: 1
 
 jobs:
+  # Security check for pull_request_target events
+  security-check:
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    name: Security Check
+    outputs:
+      approved: ${{ steps.check-approval.outputs.approved }}
+    permissions:
+      pull-requests: read
+    steps:
+      - name: Check if PR is from trusted source
+        id: check-approval
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const prNumber = context.payload.pull_request.number;
+            const prAuthor = context.payload.pull_request.user.login;
+            const prRepo = context.payload.pull_request.head.repo.full_name;
+            
+            // Only allow PRs from the same repository or approved external contributors
+            const trustedRepo = `${owner}/${repo}`;
+            const isFromSameRepo = prRepo === trustedRepo;
+            
+            // Check if PR has the 'verify' label (manual approval)
+            const hasVerifyLabel = context.payload.pull_request.labels.some(
+              label => label.name === 'verify'
+            );
+            
+            // Check if author is a collaborator
+            let isCollaborator = false;
+            try {
+              await github.rest.repos.checkCollaborator({
+                owner,
+                repo,
+                username: prAuthor
+              });
+              isCollaborator = true;
+            } catch (error) {
+              isCollaborator = false;
+            }
+            
+            const approved = isFromSameRepo || (hasVerifyLabel && isCollaborator);
+            
+            core.info(`PR Author: ${prAuthor}`);
+            core.info(`PR Repository: ${prRepo}`);
+            core.info(`Is from same repo: ${isFromSameRepo}`);
+            core.info(`Has verify label: ${hasVerifyLabel}`);
+            core.info(`Is collaborator: ${isCollaborator}`);
+            core.info(`Approved: ${approved}`);
+            
+            if (!approved) {
+              core.setFailed(
+                'This PR requires manual approval. Please ensure the PR is from a trusted source and add the "verify" label.'
+              );
+            }
+            
+            return approved;
+
   # Matrix generation job to discover containers to build
   discover-containers:
     runs-on: ubuntu-latest
     name: Discover Modified Containers
+    needs: [security-check]
+    if: |
+      always() &&
+      (github.event_name != 'pull_request_target' || needs.security-check.outputs.approved == 'true') &&
+      (github.event_name == 'push' || 
+       github.event_name == 'workflow_dispatch' ||
+       github.event_name == 'schedule' ||
+       (github.event_name == 'pull_request_target' && contains(github.event.pull_request.labels.*.name, 'verify')) ||
+       github.event_name == 'pull_request')
     outputs:
       matrix: ${{ steps.generate-matrix.outputs.matrix }}
       has_changes: ${{ steps.generate-matrix.outputs.has_changes }}
@@ -59,14 +127,25 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - name: Checkout Repository
+      - name: Checkout Repository (Safe)
         uses: actions/checkout@v4
         with:
+          # For pull_request_target, always checkout the base branch first for security
           fetch-depth: ${{ github.event_name == 'push' && 2 || 0 }}
-          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.ref || github.ref }}
-          repository: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.base.ref || github.ref }}
+          repository: ${{ github.repository }}
 
-      - name: Get changed files
+      - name: Fetch PR changes (if pull_request_target)
+        if: github.event_name == 'pull_request_target'
+        run: |
+          # Safely fetch the PR changes without checking out untrusted code
+          git fetch origin pull/${{ github.event.pull_request.number }}/head:pr-branch
+          # Get the list of changed files without checking out
+          git diff --name-only HEAD..pr-branch > changed_files.txt
+          echo "CHANGED_FILES_FROM_PR=true" >> $GITHUB_ENV
+
+      - name: Get changed files (for regular events)
+        if: github.event_name != 'pull_request_target'
         id: changed-files
         uses: tj-actions/changed-files@v44
         with:
@@ -108,15 +187,30 @@ jobs:
             done
           else
             echo "Discovering containers from changed files"
-            for file in $CHANGED_FILES; do
-              # Extract container path pattern: broadsage/{app}/{version}/{platform}
-              if [[ "$file" =~ ^broadsage/([^/]+)/([^/]+)/([^/]+)/ ]]; then
-                container_path="broadsage/${BASH_REMATCH[1]}/${BASH_REMATCH[2]}/${BASH_REMATCH[3]}"
-                if [[ -f "$container_path/Dockerfile" ]]; then
-                  containers+=("$container_path")
+            
+            # Handle pull_request_target events with safe file discovery
+            if [[ "${{ github.event_name }}" == "pull_request_target" && "$CHANGED_FILES_FROM_PR" == "true" ]]; then
+              echo "Using safely discovered changed files from PR"
+              while IFS= read -r file; do
+                if [[ -n "$file" && "$file" =~ ^broadsage/([^/]+)/([^/]+)/([^/]+)/ ]]; then
+                  container_path="broadsage/${BASH_REMATCH[1]}/${BASH_REMATCH[2]}/${BASH_REMATCH[3]}"
+                  if [[ -f "$container_path/Dockerfile" ]]; then
+                    containers+=("$container_path")
+                  fi
                 fi
-              fi
-            done
+              done < changed_files.txt
+            else
+              # Regular event handling
+              for file in $CHANGED_FILES; do
+                # Extract container path pattern: broadsage/{app}/{version}/{platform}
+                if [[ "$file" =~ ^broadsage/([^/]+)/([^/]+)/([^/]+)/ ]]; then
+                  container_path="broadsage/${BASH_REMATCH[1]}/${BASH_REMATCH[2]}/${BASH_REMATCH[3]}"
+                  if [[ -f "$container_path/Dockerfile" ]]; then
+                    containers+=("$container_path")
+                  fi
+                fi
+              done
+            fi
           fi
           
           # Remove duplicates and create matrix
@@ -159,11 +253,19 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.discover-containers.outputs.matrix) }}
     steps:
-      - name: Checkout Repository
+      - name: Checkout Repository (Safe)
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.ref || github.ref }}
-          repository: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name || github.repository }}
+          # For pull_request_target, checkout the base branch for security
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.base.ref || github.ref }}
+          repository: ${{ github.repository }}
+
+      - name: Fetch and checkout PR changes (if pull_request_target)
+        if: github.event_name == 'pull_request_target'
+        run: |
+          # Safely fetch and checkout the PR branch
+          git fetch origin pull/${{ github.event.pull_request.number }}/head:pr-branch
+          git checkout pr-branch
 
       - name: Lint Dockerfile with Hadolint
         uses: hadolint/hadolint-action@v3.1.0
@@ -193,12 +295,20 @@ jobs:
     outputs:
       images: ${{ steps.build-metadata.outputs.images }}
     steps:
-      - name: Checkout Repository
+      - name: Checkout Repository (Safe)
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
-          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.ref || github.ref }}
-          repository: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name || github.repository }}
+          # For pull_request_target, checkout the base branch for security
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.base.ref || github.ref }}
+          repository: ${{ github.repository }}
+
+      - name: Fetch and checkout PR changes (if pull_request_target)
+        if: github.event_name == 'pull_request_target'
+        run: |
+          # Safely fetch and checkout the PR branch
+          git fetch origin pull/${{ github.event.pull_request.number }}/head:pr-branch
+          git checkout pr-branch
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
