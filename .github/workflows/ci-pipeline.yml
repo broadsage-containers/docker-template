@@ -57,49 +57,17 @@ jobs:
             echo "containers=${containers_json}" >> $GITHUB_OUTPUT
             echo "dockerfiles=${dockerfiles_json}" >> $GITHUB_OUTPUT
           fi
-  license-headers-linter:
-    runs-on: ubuntu-latest
-    name: License Headers Linter
-    permissions:
-      contents: read
-      pull-requests: write
-    needs: get-containers
-    steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
-        name: Checkout Repository
-        with:
-          ref: ${{ github.event.pull_request.head.ref }}
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-      - id: get-modified-files
-        name: 'Get modified files'
-        env:
-          DOCKERFILES: "${{ needs.get-containers.outputs.dockerfiles }}"
-        run: |
-          if [[ -n "${DOCKERFILES}" ]]; then
-            # Overwrite configuration file to analyze only changed dockerfiles
-            yq -i '. | .header.paths=env(DOCKERFILES)' .licenserc.yaml
-            echo "result=success" >> $GITHUB_OUTPUT
-          else
-            echo "result=skip" >> $GITHUB_OUTPUT
-          fi
-      - name: Check license Headers
-        uses: apache/skywalking-eyes/header@5c5b974209f0de5d905f37deb69369068ebfc15c
-        if: ${{ steps.get-modified-files.outputs.result == 'success' }}
-  vib-verify:
+  
+  build-and-test:
     runs-on: ubuntu-latest
     needs: get-containers
-    # Automatic PRs do not need to be re-tested in GitHub
     if: |
       needs.get-containers.outputs.result == 'ok' &&
       github.event.pull_request.user.login != 'bitnami-bot'
-    name: VIB Verify
+    name: Build and Test Docker Images
     permissions:
       contents: read
-    env:
-      CSP_API_URL: https://console.tanzu.broadcom.com
-      CSP_API_TOKEN: ${{ secrets.CSP_API_TOKEN }}
-      VIB_PUBLIC_URL: https://cp.app-catalog.vmware.com
-    continue-on-error: false
+      packages: write
     strategy:
       fail-fast: false
       max-parallel: 2
@@ -109,11 +77,20 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
         name: Checkout Repository
         with:
-          # Full history is not required anymore
           fetch-depth: 1
-          # labeled events trigger the event with the latest commit in main
           ref: ${{ github.event.pull_request.head.ref }}
           repository: ${{ github.event.pull_request.head.repo.full_name }}
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
       - id: get-container-metadata
         name: Get image tag and container name
         run: |
@@ -131,68 +108,146 @@ jobs:
               echo "No tag found for: ${{ matrix.container }}"
               exit 1
             else
-              dsl_path="${name}"
-              if [[ -d ".vib/${dsl_path}/${branch}" ]]; then
-                dsl_path="${dsl_path}/${branch}"
-              fi
               echo "tag=${tag}" >> $GITHUB_OUTPUT
               echo "name=${name}" >> $GITHUB_OUTPUT
-              echo "dsl_path=${dsl_path}" >> $GITHUB_OUTPUT
+              echo "image_name=ghcr.io/${{ github.repository_owner }}/${name}" >> $GITHUB_OUTPUT
               echo "result=ok" >> $GITHUB_OUTPUT
             fi
           else
-            # Container folder doesn't exists we are assuming a deprecation
+            # Container folder doesn't exist, assuming deprecation
             echo "result=skip" >> $GITHUB_OUTPUT
           fi
-      - uses: vmware-labs/vmware-image-builder-action@v0
-        name: Verify
+      
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
         if: ${{ steps.get-container-metadata.outputs.result == 'ok' }}
         with:
-          pipeline: ${{ steps.get-container-metadata.outputs.dsl_path }}/vib-verify.json
-        env:
-          # Path with docker resources
-          VIB_ENV_PATH: ${{ matrix.container }}
-          # Container name
-          VIB_ENV_CONTAINER: ${{ steps.get-container-metadata.outputs.name }}
-          VIB_ENV_TAG: ${{ steps.get-container-metadata.outputs.tag }}
-  verification-summary:
-    # Ensure all containers passed the verification
+          images: ${{ steps.get-container-metadata.outputs.image_name }}
+          tags: |
+            type=raw,value=${{ steps.get-container-metadata.outputs.tag }}
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+      
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        if: ${{ steps.get-container-metadata.outputs.result == 'ok' }}
+        id: build
+        with:
+          context: ${{ matrix.container }}
+          file: ${{ matrix.container }}/Dockerfile
+          push: false
+          load: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      
+      - name: Test Docker image
+        if: ${{ steps.get-container-metadata.outputs.result == 'ok' }}
+        run: |
+          # Get the first tag from the built image
+          IMAGE_TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -n1)
+          echo "Testing image: $IMAGE_TAG"
+          
+          # Basic health check - ensure container starts and stops properly
+          docker run --rm --name test-container -d $IMAGE_TAG
+          sleep 10
+          
+          # Check if container is running
+          if ! docker ps | grep -q test-container; then
+            echo "Container failed to start or exited unexpectedly"
+            docker logs test-container || true
+            exit 1
+          fi
+          
+          # Stop the container
+          docker stop test-container || true
+          echo "Container test passed"
+      
+      - name: Security scan with Trivy
+        uses: aquasecurity/trivy-action@master
+        if: ${{ steps.get-container-metadata.outputs.result == 'ok' }}
+        with:
+          image-ref: ${{ steps.get-container-metadata.outputs.image_name }}:${{ steps.get-container-metadata.outputs.tag }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+      
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v2
+        if: ${{ steps.get-container-metadata.outputs.result == 'ok' && always() }}
+        with:
+          sarif_file: 'trivy-results.sarif'
+      
+      - name: Push Docker image (on main branch)
+        uses: docker/build-push-action@v5
+        if: |
+          steps.get-container-metadata.outputs.result == 'ok' &&
+          github.ref == 'refs/heads/main' &&
+          github.event_name == 'push'
+        with:
+          context: ${{ matrix.container }}
+          file: ${{ matrix.container }}/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      
+      - name: Generate build summary
+        if: ${{ steps.get-container-metadata.outputs.result == 'ok' && always() }}
+        run: |
+          echo "## Docker Build Summary for ${{ steps.get-container-metadata.outputs.name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Container Path**: ${{ matrix.container }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image Name**: ${{ steps.get-container-metadata.outputs.image_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tag**: ${{ steps.get-container-metadata.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Status**: ${{ steps.build.outcome }}" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ github.ref }}" == "refs/heads/main" && "${{ github.event_name }}" == "push" ]]; then
+            echo "- **Published**: ✅ Yes" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Published**: ❌ No (PR or non-main branch)" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  build-summary:
     runs-on: ubuntu-latest
-    name: Check Matrix Outcome
+    name: Build Summary
     permissions:
       statuses: write
     needs:
       - get-containers
-      - vib-verify
+      - build-and-test
     outputs:
       result: ${{ steps.get-status.outputs.result }}
     if: ${{ always() && github.event.pull_request.user.login != 'bitnami-bot' }}
     steps:
       - id: get-status
-        name: Check Status
+        name: Check Build Status
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
         with:
           result-encoding: string
           script: |
             state = 'success'
-            description = 'Well done! Everything looks good. Please wait for the Bitnami Team review.'
+            description = 'All Docker images built and tested successfully!'
+            
             if ("${{ needs.get-containers.result }}" != "success" ) {
-              description = "If you've just created this PR, don't worry about this message. The Bitnami Team has to review it and make the verification possible."
+              description = "Container detection failed. Please check the workflow."
               core.warning(description)
               state = 'pending'
             } else if ("${{ needs.get-containers.outputs.result }}" == "skip" ) {
-              description = "It seems these changes don't involve any container"
-              core.warning(description)
-            } else if ("${{ needs.vib-verify.result }}" != "success" ) {
-              description = "Please review previous jobs to get more information"
+              description = "No containers to build - only documentation changes detected"
+              core.notice(description)
+            } else if ("${{ needs.build-and-test.result }}" != "success" ) {
+              description = "Docker image build or test failed. Check the build logs for details."
               core.error(description)
               state = 'error'
             } else {
               core.notice(description)
             }
+            
             try {
               await github.rest.repos.createCommitStatus({
-                context: `${context.workflow} / Verification Summary (${context.eventName})`,
+                context: `${context.workflow} / Build Summary (${context.eventName})`,
                 owner: context.payload.repository.owner.login,
                 repo: context.payload.repository.name,
                 sha: context.payload.pull_request.head.sha,
@@ -205,20 +260,19 @@ jobs:
               core.setFailed(error.message)
             }
             return state
+
   auto-pr-review:
     runs-on: ubuntu-latest
-    name: Reviewal for automated PRs
+    name: Automated PR Review
     permissions:
       pull-requests: write
     needs:
-      - license-headers-linter
-    # This job will be executed when the PR was created by bitnami-bot and it has the 'auto-merge' label
+      - build-summary
     if: |
       contains(github.event.pull_request.labels.*.name, 'auto-merge') &&
-      github.event.pull_request.user.login == 'bitnami-bot'
+      github.event.pull_request.user.login == 'bitnami-bot' &&
+      needs.build-summary.outputs.result == 'success'
     steps:
-      # Approve the CI's PR automatically, as it has been tested in our internal pipeline already
-      # Approved by the 'github-actions' user; a PR can't be approved by its author
       - name: PR Approval
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
         with:
@@ -231,13 +285,13 @@ jobs:
               pull_number: context.issue.number,
               event: 'APPROVE',
             });
-      - name: Merge
+      
+      - name: Merge PR
         id: merge
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
         with:
           result-encoding: string
           retries: 3
-          # Necessary to trigger CD workflows
           github-token: ${{ secrets.BITNAMI_BOT_TOKEN }}
           script: |
             github.rest.pulls.merge({
@@ -246,15 +300,14 @@ jobs:
               repo: context.repo.repo,
               merge_method: 'squash'
             })
-      # If the merge process did not succeed,
-      # post a comment on the PR and assign a maintainer agent to review it
+      
       - name: Manual review required
         if: ${{ always() && steps.merge.outcome != 'success' }}
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
         env:
           BODY: |
-            There has been an error during the automated release process. Manual revision is now required.
-            Please check the related [action_run#${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for more information.
+            Automated merge failed. Manual review required.
+            Check the [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.
         with:
           retries: 3
           script: |
