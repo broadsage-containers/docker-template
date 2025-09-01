@@ -72,7 +72,7 @@ jobs:
       - name: Get changed files
         if: github.event_name == 'push'
         id: changed-files
-        uses: tj-actions/changed-files@20576b4b9ed46d41e2d45a2256e5e2316dde6834 # v43.0.1
+        uses: step-security/changed-files@95b56dadb92a30ca9036f16423fd3c088a71ee94 # v46.0.5
         with:
           files: |
             broadsage/**
@@ -322,7 +322,7 @@ jobs:
           fi
 
       - name: Security scan with Trivy
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # master
         with:
           image-ref: test-image:latest
           format: 'sarif'
