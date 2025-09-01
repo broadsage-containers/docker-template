@@ -1,0 +1,275 @@
+name: '[PR] Pull Request Check'
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+# Prevent concurrent builds for the same PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAMESPACE: ${{ github.repository_owner }}
+  BUILD_PLATFORMS: linux/amd64,linux/arm64
+
+jobs:
+  # Matrix generation job to discover containers to build
+  discover-containers:
+    runs-on: ubuntu-latest
+    name: Discover Modified Containers
+    outputs:
+      matrix: ${{ steps.generate-matrix.outputs.matrix }}
+      has_changes: ${{ steps.generate-matrix.outputs.has_changes }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v44
+        with:
+          files: |
+            broadsage/**
+          files_ignore: |
+            **/*.md
+            **/*.txt
+            **/LICENSE
+            .github/**
+
+      - name: Generate build matrix
+        id: generate-matrix
+        env:
+          CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
+        run: |
+          set -euo pipefail
+          
+          echo "Debug: Changed files: $CHANGED_FILES"
+          echo "Debug: Event name: ${{ github.event_name }}"
+          
+          # Initialize containers array
+          containers=()
+          
+          echo "Discovering containers from changed files"
+          
+          # Regular event handling
+          for file in $CHANGED_FILES; do
+            # Extract container path pattern: broadsage/{app}/{version}/{platform}
+            if [[ "$file" =~ ^broadsage/([^/]+)/([^/]+)/([^/]+)/ ]]; then
+              container_path="broadsage/${BASH_REMATCH[1]}/${BASH_REMATCH[2]}/${BASH_REMATCH[3]}"
+              if [[ -f "$container_path/Dockerfile" ]]; then
+                containers+=("$container_path")
+              fi
+            fi
+          done
+          
+          # Remove duplicates and create matrix
+          if [[ ${#containers[@]} -gt 0 ]]; then
+            unique_containers=($(printf "%s\n" "${containers[@]}" | sort -u))
+            echo "Found containers to build: ${unique_containers[*]}"
+            
+            # Generate JSON matrix
+            matrix_json="["
+            for i in "${!unique_containers[@]}"; do
+              container="${unique_containers[$i]}"
+              app_name=$(echo "$container" | cut -d'/' -f2)
+              version=$(echo "$container" | cut -d'/' -f3)
+              platform=$(echo "$container" | cut -d'/' -f4)
+              
+              if [[ $i -gt 0 ]]; then
+                matrix_json+=","
+              fi
+              
+              matrix_json+="{\"container\":\"$container\",\"app\":\"$app_name\",\"version\":\"$version\",\"platform\":\"$platform\"}"
+            done
+            matrix_json+="]"
+            
+            echo "matrix={\"include\":$matrix_json}" >> $GITHUB_OUTPUT
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "Generated matrix: $matrix_json"
+          else
+            echo "No containers found to build"
+            echo "matrix={\"include\":[]}" >> $GITHUB_OUTPUT
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          fi
+
+  # Lint and validate Dockerfiles
+  lint-dockerfiles:
+    runs-on: ubuntu-latest
+    name: Lint Dockerfiles
+    needs: discover-containers
+    if: needs.discover-containers.outputs.has_changes == 'true'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.discover-containers.outputs.matrix) }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Lint Dockerfile with Hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: ${{ matrix.container }}/Dockerfile
+          format: sarif
+          output-file: hadolint-results.sarif
+          no-fail: true
+
+      - name: Upload Hadolint results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: hadolint-results.sarif
+          category: hadolint
+
+  # Build and test container images (without pushing)
+  build-and-test:
+    runs-on: ubuntu-latest
+    name: Build & Test (Unprivileged)
+    needs: [discover-containers, lint-dockerfiles]
+    if: needs.discover-containers.outputs.has_changes == 'true'
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix: ${{ fromJSON(needs.discover-containers.outputs.matrix) }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Generate build metadata
+        id: build-metadata
+        env:
+          CONTAINER: ${{ matrix.container }}
+          APP: ${{ matrix.app }}
+          VERSION: ${{ matrix.version }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+          
+          # Generate image name
+          image_name="${REGISTRY}/${IMAGE_NAMESPACE}/${APP}"
+          
+          # Generate test tags for PR
+          short_sha=$(echo "${{ github.sha }}" | cut -c1-7)
+          tags="${image_name}:${VERSION}-${PLATFORM}-pr-${{ github.event.number }}-${short_sha}"
+          
+          echo "image_name=${image_name}" >> $GITHUB_OUTPUT
+          echo "tags=${tags}" >> $GITHUB_OUTPUT
+          
+          # Generate labels
+          labels=$(cat <<EOF
+          org.opencontainers.image.title=${APP}
+          org.opencontainers.image.description=Enterprise-grade ${APP} container image (PR build)
+          org.opencontainers.image.url=https://github.com/${{ github.repository }}
+          org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          org.opencontainers.image.version=${VERSION}
+          org.opencontainers.image.created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          org.opencontainers.image.revision=${{ github.sha }}
+          org.opencontainers.image.licenses=Apache-2.0
+          org.opencontainers.image.vendor=${{ github.repository_owner }}
+          org.opencontainers.image.base.name=docker.io/bitnami/minideb:bookworm
+          EOF
+          )
+          
+          # Convert labels to single line for output
+          labels_single_line=$(echo "$labels" | tr '\n' ',' | sed 's/,$//')
+          echo "labels=${labels_single_line}" >> $GITHUB_OUTPUT
+          
+          echo "Generated metadata for ${CONTAINER}:"
+          echo "  Image: ${image_name}"
+          echo "  Tags: ${tags}"
+
+      - name: Build Docker image (test only)
+        uses: docker/build-push-action@v5
+        id: build
+        with:
+          context: ${{ matrix.container }}
+          file: ${{ matrix.container }}/Dockerfile
+          platforms: linux/amd64  # Only build for amd64 in PR checks for speed
+          push: false
+          load: true
+          tags: ${{ steps.build-metadata.outputs.tags }}
+          labels: ${{ steps.build-metadata.outputs.labels }}
+          cache-from: type=gha,scope=build-${{ matrix.app }}-${{ matrix.version }}-${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=build-${{ matrix.app }}-${{ matrix.version }}-${{ matrix.platform }}
+
+      - name: Test container startup
+        run: |
+          set -euo pipefail
+          
+          image_tag="${{ steps.build-metadata.outputs.tags }}"
+          echo "Testing container startup for: $image_tag"
+          
+          # Run basic startup test
+          container_id=$(docker run -d "$image_tag")
+          
+          # Wait for container to start and check if it's running
+          sleep 5
+          if docker ps --filter "id=$container_id" --format "table {{.ID}}\t{{.Status}}" | grep -q "Up"; then
+            echo "✅ Container started successfully"
+            docker logs "$container_id" || true
+          else
+            echo "❌ Container failed to start"
+            docker logs "$container_id" || true
+            exit 1
+          fi
+          
+          # Cleanup
+          docker stop "$container_id" || true
+          docker rm "$container_id" || true
+
+      - name: Run security scan with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ steps.build-metadata.outputs.tags }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+          category: 'trivy'
+
+  # Summary job
+  pr-check-summary:
+    runs-on: ubuntu-latest
+    name: PR Check Summary
+    needs: [discover-containers, lint-dockerfiles, build-and-test]
+    if: always()
+    steps:
+      - name: Check results
+        run: |
+          if [[ "${{ needs.discover-containers.result }}" == "success" ]]; then
+            if [[ "${{ needs.discover-containers.outputs.has_changes }}" == "true" ]]; then
+              echo "✅ Container discovery completed - found changes"
+              if [[ "${{ needs.lint-dockerfiles.result }}" == "success" && "${{ needs.build-and-test.result }}" == "success" ]]; then
+                echo "✅ All checks passed! PR is ready for review."
+                echo "::notice::All container builds and tests completed successfully"
+              else
+                echo "❌ Some checks failed. Please review the errors above."
+                exit 1
+              fi
+            else
+              echo "✅ No container changes detected - skipping builds"
+            fi
+          else
+            echo "❌ Container discovery failed"
+            exit 1
+          fi
