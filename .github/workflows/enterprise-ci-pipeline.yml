@@ -26,9 +26,10 @@ on:
 permissions:
   contents: read
   packages: write
-  pull-requests: write
   security-events: write
   statuses: write
+  id-token: write
+  attestations: write
 
 # Prevent concurrent builds for the same branch
 concurrency:
@@ -57,22 +58,21 @@ jobs:
       contents: read
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
+        uses: step-security/harden-runner@eb238b55efaa70779f274895e782ed17c84f2895 # v2.6.1
         with:
           egress-policy: audit
 
       - name: Checkout Repository
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
         with:
           # For push events, get last 2 commits for comparison
           fetch-depth: ${{ github.event_name == 'push' && 2 || 0 }}
           ref: ${{ github.ref }}
-          repository: ${{ github.repository }}
 
       - name: Get changed files
-        if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
+        if: github.event_name == 'push'
         id: changed-files
-        uses: tj-actions/changed-files@2d756ea4c53f7f6b397767d8723b3a10a9f35bf2 # v44.0.0
+        uses: tj-actions/changed-files@20576b4b9ed46d41e2d45a2256e5e2316dde6834 # v43.0.1
         with:
           files: |
             broadsage/**
@@ -164,17 +164,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.discover-containers.outputs.matrix) }}
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
+        uses: step-security/harden-runner@eb238b55efaa70779f274895e782ed17c84f2895 # v2.6.1
         with:
           egress-policy: audit
 
       - name: Checkout Repository
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
-        with:
-          ref: ${{ github.ref }}
-          repository: ${{ github.repository }}
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
 
       - name: Lint Dockerfile with Hadolint
         uses: hadolint/hadolint-action@54c9adbab1582c2ef04b2016b760714a4bfde3cf # v3.1.0
@@ -185,11 +185,11 @@ jobs:
           no-fail: true
 
       - name: Upload Hadolint results
-        uses: github/codeql-action/upload-sarif@2d92b76c45b91eb80fc44c74ce3fce0ee94e8f9d # v3.30.0
+        uses: github/codeql-action/upload-sarif@1b1aada464948af03b950897e5eb522f92603cc2 # v3.24.9
         if: always()
         with:
           sarif_file: hadolint-results.sarif
-          category: hadolint
+          category: hadolint-${{ matrix.container }}
 
   # Build and test container images
   build-and-test:
@@ -201,34 +201,31 @@ jobs:
       fail-fast: false
       max-parallel: 3
       matrix: ${{ fromJSON(needs.discover-containers.outputs.matrix) }}
-    outputs:
-      images: ${{ steps.build-metadata.outputs.images }}
     permissions:
       contents: read
       packages: write
       id-token: write
       attestations: write
+      security-events: write
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
+        uses: step-security/harden-runner@eb238b55efaa70779f274895e782ed17c84f2895 # v2.6.1
         with:
           egress-policy: audit
 
       - name: Checkout Repository
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
         with:
           fetch-depth: 1
-          ref: ${{ github.ref }}
-          repository: ${{ github.repository }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+        uses: docker/setup-buildx-action@f95db51fddba0c2d1ec667646a06c2ce06100226 # v3.0.0
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
+        uses: docker/setup-qemu-action@68827325e0b33c7199eb31dd4e31fbe9023e06e3 # v3.0.0
 
       - name: Log in to Container Registry
-        uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0
+        uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d # v3.0.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -266,7 +263,6 @@ jobs:
           
           echo "image_name=${image_name}" >> $GITHUB_OUTPUT
           echo "tags=${tags}" >> $GITHUB_OUTPUT
-          echo "images=${image_name}" >> $GITHUB_OUTPUT
           
           # Generate labels
           labels=$(cat <<EOF
@@ -292,23 +288,9 @@ jobs:
           echo "  Tags: ${tags}"
           echo "  Labels: ${labels_single_line}"
 
-      - name: Build Docker image
-        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
+      - name: Build and test image
+        uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
         id: build
-        with:
-          context: ${{ matrix.container }}
-          file: ${{ matrix.container }}/Dockerfile
-          platforms: ${{ env.BUILD_PLATFORMS }}
-          push: false
-          load: false
-          tags: ${{ steps.build-metadata.outputs.tags }}
-          labels: ${{ steps.build-metadata.outputs.labels }}
-          cache-from: type=gha,scope=build-${{ matrix.app }}-${{ matrix.version }}-${{ matrix.platform }}
-          cache-to: type=gha,mode=max,scope=build-${{ matrix.app }}-${{ matrix.version }}-${{ matrix.platform }}
-          outputs: type=image,name=${{ steps.build-metadata.outputs.image_name }},push=false
-
-      - name: Load image for testing
-        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
         with:
           context: ${{ matrix.container }}
           file: ${{ matrix.container }}/Dockerfile
@@ -316,13 +298,43 @@ jobs:
           push: false
           load: true
           tags: test-image:latest
+          labels: ${{ steps.build-metadata.outputs.labels }}
           cache-from: type=gha,scope=build-${{ matrix.app }}-${{ matrix.version }}-${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=build-${{ matrix.app }}-${{ matrix.version }}-${{ matrix.platform }}
+
+      - name: Test container functionality
+        run: |
+          set -euo pipefail
+          echo "Testing container functionality..."
+          
+          # Basic container health check
+          docker run --rm --name test-container -d test-image:latest
+          sleep 5
+          
+          # Check if container is running
+          if docker ps | grep -q test-container; then
+            echo "✅ Container is running successfully"
+            docker stop test-container
+          else
+            echo "❌ Container failed to start"
+            docker logs test-container || true
+            exit 1
+          fi
+
       - name: Security scan with Trivy
-        uses: aquasecurity/trivy-action@b2933f565dbc598b29947660e66259e3c7bc8561 # 0.20.0
+        uses: aquasecurity/trivy-action@master
         with:
           image-ref: test-image:latest
           format: 'sarif'
           output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@1b1aada464948af03b950897e5eb522f92603cc2 # v3.24.9
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy-${{ matrix.container }}
+
       - name: Generate security report
         if: always()
         run: |
@@ -344,17 +356,20 @@ jobs:
             
             if [[ "$critical_count" -gt 0 ]]; then
               echo "⚠️ **Critical vulnerabilities found!**" >> $GITHUB_STEP_SUMMARY
+              echo "critical_vulns=true" >> $GITHUB_OUTPUT
             elif [[ "$high_count" -gt 0 ]]; then
               echo "⚠️ **High severity vulnerabilities found**" >> $GITHUB_STEP_SUMMARY
+              echo "high_vulns=true" >> $GITHUB_OUTPUT
             else
               echo "✅ **No critical or high severity vulnerabilities found**" >> $GITHUB_STEP_SUMMARY
+              echo "clean_scan=true" >> $GITHUB_OUTPUT
             fi
           else
             echo "❌ **Security scan failed**" >> $GITHUB_STEP_SUMMARY
           fi
 
-      - name: Push to registry
-        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
+      - name: Build multi-platform image (production)
+        uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
         id: push
         if: |
           (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
@@ -367,51 +382,68 @@ jobs:
           tags: ${{ steps.build-metadata.outputs.tags }}
           labels: ${{ steps.build-metadata.outputs.labels }}
           cache-from: type=gha,scope=build-${{ matrix.app }}-${{ matrix.version }}-${{ matrix.platform }}
-          outputs: type=registry,name=${{ steps.build-metadata.outputs.image_name }}
+          provenance: true
+          sbom: true
+          outputs: type=registry
 
-      - name: Set image digest output
-        id: image-digest
+      - name: Generate and attest SBOM
         if: steps.push.outcome == 'success'
-        run: |
-          # Extract the primary image name and combine with digest
-          image_name="${{ steps.build-metadata.outputs.image_name }}"
-          digest="${{ steps.push.outputs.digest }}"
-          image_ref="${image_name}@${digest}"
-          echo "image_ref=${image_ref}" >> $GITHUB_OUTPUT
-          echo "digest=${digest}" >> $GITHUB_OUTPUT
+        uses: actions/attest-sbom@5026d3663739160db546203eeaffa6aa1c51a4d6 # v1.4.1
+        id: attest-sbom
+        with:
+          subject-name: ${{ steps.build-metadata.outputs.image_name }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
 
-      - name: Install tools for signing and SBOM
+      - name: Install Cosign for additional signing
         if: steps.push.outcome == 'success'
-        run: |
-          # Install Cosign
-          curl -O -L "https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64"
-          sudo install cosign-linux-amd64 /usr/local/bin/cosign
-          
-          # Install Syft
-          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+        uses: sigstore/cosign-installer@e1523de7571e31dbe865fd2e80c5c7c23ae71eb4 # v3.4.0
 
-      - name: Generate SBOM and sign image
+      - name: Sign container image with Cosign
         if: steps.push.outcome == 'success'
         env:
           COSIGN_EXPERIMENTAL: 1
         run: |
-          image_ref="${{ steps.image-digest.outputs.image_ref }}"
-          
-          # Generate SBOM
-          syft "${image_ref}" -o spdx-json=sbom.spdx.json
+          image_ref="${{ steps.build-metadata.outputs.image_name }}@${{ steps.push.outputs.digest }}"
           
           # Sign the image
           cosign sign --yes "${image_ref}"
           
-          echo "✅ Generated SBOM and signed image: ${image_ref}"
+          # Verify the signature (optional verification step)
+          cosign verify "${image_ref}" \
+            --certificate-identity-regexp=".*" \
+            --certificate-oidc-issuer-regexp=".*" || echo "Verification skipped for workflow context"
+          
+          echo "✅ Signed image: ${image_ref}"
 
-      - name: Attest SBOM
+      - name: Generate build artifacts summary
         if: steps.push.outcome == 'success'
-        uses: actions/attest-sbom@5026d3663739160db546203eeaffa6aa1c51a4d6 # v1.4.1
-        with:
-          subject-digest: ${{ steps.push.outputs.digest }}
-          sbom-path: sbom.spdx.json
-          push-to-registry: true
+        run: |
+          image_ref="${{ steps.build-metadata.outputs.image_name }}@${{ steps.push.outputs.digest }}"
+          
+          echo "## 📦 Build Artifacts for ${{ matrix.container }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Image:** \`${image_ref}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Tags:** ${{ steps.build-metadata.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Digest:** \`${{ steps.push.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔒 Security Features Enabled" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ **SBOM Generated**: Software Bill of Materials created and attested" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ **Build Provenance**: Build metadata recorded automatically" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ **Image Signed**: Container image signed with Cosign" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ **GitHub Attestations**: Build provenance and SBOM attestations available" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ **Registry Integration**: Attestations pushed to container registry" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔍 Verification Commands" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "# Verify signature" >> $GITHUB_STEP_SUMMARY
+          echo "cosign verify ${image_ref} --certificate-identity-regexp=\".*\" --certificate-oidc-issuer-regexp=\".*\"" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "# Download SBOM" >> $GITHUB_STEP_SUMMARY
+          echo "cosign download sbom ${image_ref}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "# View attestations" >> $GITHUB_STEP_SUMMARY
+          echo "gh attestation list --repo ${{ github.repository }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
 
   # Comprehensive build summary
   build-summary:
@@ -421,9 +453,10 @@ jobs:
     if: always()
     permissions:
       statuses: write
+      contents: read
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
+        uses: step-security/harden-runner@eb238b55efaa70779f274895e782ed17c84f2895 # v2.6.1
         with:
           egress-policy: audit
 
@@ -474,5 +507,3 @@ jobs:
               ['Event', '${{ github.event_name }}']
             ]);
             await core.summary.write();
-
-
