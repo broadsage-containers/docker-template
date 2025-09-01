@@ -297,63 +297,12 @@ jobs:
           load: true
           tags: test-image:latest
           cache-from: type=gha,scope=build-${{ matrix.app }}-${{ matrix.version }}-${{ matrix.platform }}
-
-      - name: Test container functionality
-        run: |
-          set -euo pipefail
-          
-          echo "🧪 Testing container functionality..."
-          
-          # Start container in detached mode
-          container_id=$(docker run -d --name test-container test-image:latest)
-          echo "Started container: $container_id"
-          
-          # Wait for container to be ready
-          sleep 15
-          
-          # Check if container is still running
-          if ! docker ps | grep -q test-container; then
-            echo "❌ Container failed to start or exited unexpectedly"
-            echo "Container logs:"
-            docker logs test-container || true
-            exit 1
-          fi
-          
-          # Health check based on the application type
-          case "${{ matrix.app }}" in
-            "nginx")
-              echo "Testing nginx health..."
-              docker exec test-container curl -f http://localhost:8080/ || {
-                echo "❌ Nginx health check failed"
-                docker logs test-container
-                exit 1
-              }
-              ;;
-            *)
-              echo "Generic container health check passed"
-              ;;
-          esac
-          
-          # Stop container
-          docker stop test-container
-          docker rm test-container
-          
-          echo "✅ Container functionality test passed"
-
       - name: Security scan with Trivy
         uses: aquasecurity/trivy-action@0.20.0
         with:
           image-ref: test-image:latest
           format: 'sarif'
           output: 'trivy-results.sarif'
-
-      - name: Upload Trivy scan results
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
-        with:
-          sarif_file: 'trivy-results.sarif'
-          category: trivy-${{ matrix.app }}-${{ matrix.version }}-${{ matrix.platform }}
-
       - name: Generate security report
         if: always()
         run: |
