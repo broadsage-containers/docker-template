@@ -6,11 +6,11 @@ on: # rebuild any PRs and main branch changes
       - labeled
     branches:
       - main
-      - bitnami:main
+      - broadsage:main
   push:
     branches:
       - main
-      - bitnami:main
+      - broadsage:main
 permissions: {}
 # Avoid concurrency over the same PR
 concurrency:
@@ -55,23 +55,38 @@ jobs:
           fi
           
           # Adding || true to avoid "Process exited with code 1" errors
-          flavors=($(echo "$files_changed" | xargs dirname | grep -o "^bitnami/[^/]*/[^/]*/[^/]*" | sort | uniq || true))
-          assets=($(echo "$files_changed" | xargs dirname | sed -nr "s|bitnami/([^/]*)/.*|\1|p" | sort | uniq || true))
+          flavors=($(echo "$files_changed" | xargs dirname | grep -o "^broadsage/[^/]*/[^/]*/[^/]*" | sort | uniq || true))
+          assets=($(echo "$files_changed" | xargs dirname | sed -nr "s|broadsage/([^/]*)/.*|\1|p" | sort | uniq || true))
           non_readme_files=$(echo "$files_changed" | grep -vc "\.md" || true)
           dockerfiles=($(echo "$files_changed" | grep -oE ".*/Dockerfile$" | sort | uniq || true))
+
+          # Debug output
+          echo "Changed files:"
+          echo "$files_changed"
+          echo "Detected flavors: ${flavors[@]}"
+          echo "Detected assets: ${assets[@]}"
+          echo "Non-readme files count: $non_readme_files"
+          echo "Detected dockerfiles: ${dockerfiles[@]}"
 
           if [[ "$non_readme_files" -le "0" ]]; then
             # The only changes are .md files -> SKIP
             echo "result=skip" >> $GITHUB_OUTPUT
+            echo "Reason: Only documentation files were changed"
           elif [[ "${#assets[@]}" -ge "5" ]]; then
-            echo "Maximun number of assets reached. You are currently modifying: ${assets[@]}"
+            echo "Maximum number of assets reached. You are currently modifying: ${assets[@]}"
             echo "result=skip" >> $GITHUB_OUTPUT
+            echo "Reason: Too many assets modified (${#assets[@]} >= 5)"
+          elif [[ "${#flavors[@]}" -eq "0" ]]; then
+            echo "No container flavors detected in changed files"
+            echo "result=skip" >> $GITHUB_OUTPUT
+            echo "Reason: No valid container paths found in changed files"
           else
             containers_json=$(printf "%s\n" "${flavors[@]}" | jq -R . | jq -cs .)
             dockerfiles_json=$(printf "%s\n" "${dockerfiles[@]}" | jq -R . | jq -cs .)
             echo "result=ok" >> $GITHUB_OUTPUT
             echo "containers=${containers_json}" >> $GITHUB_OUTPUT
             echo "dockerfiles=${dockerfiles_json}" >> $GITHUB_OUTPUT
+            echo "Proceeding with build for ${#flavors[@]} container(s): ${flavors[@]}"
           fi
   
   build-and-test:
