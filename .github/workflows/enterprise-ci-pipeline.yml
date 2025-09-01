@@ -394,7 +394,7 @@ jobs:
         if: steps.push.outcome == 'success'
         uses: actions/attest-sbom@v1
         with:
-          subject-name: ${{ steps.image-digest.outputs.image_ref }}
+          subject-digest: ${{ steps.push.outputs.digest }}
           sbom-path: sbom.spdx.json
           push-to-registry: true
 
