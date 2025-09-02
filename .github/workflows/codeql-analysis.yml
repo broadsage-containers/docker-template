@@ -1,0 +1,377 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage <opensource@broadsage.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: "CodeQL Security Analysis"
+
+on:
+  push:
+    branches:
+      - "main"
+      - "feature/**"
+      - "hotfix/**"
+      - "bugfix/**"
+      - "release/**"
+    paths:
+      - "**/*.sh"
+      - "**/Dockerfile*"
+      - "**/*.py"
+      - "**/*.js"
+      - "**/*.ts"
+      - "**/*.yml"
+      - "**/*.yaml"
+      - ".github/workflows/**"
+      - ".github/codeql/**"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "**/*.sh"
+      - "**/Dockerfile*"
+      - "**/*.py"
+      - "**/*.js"
+      - "**/*.ts"
+      - "**/*.yml"
+      - "**/*.yaml"
+      - ".github/workflows/**"
+      - ".github/codeql/**"
+  schedule:
+    # Run at 02:00 UTC every day for comprehensive analysis
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+    inputs:
+      queries:
+        description: "Query suite to run"
+        required: false
+        default: "security-extended"
+        type: choice
+        options:
+          - "security-extended"
+          - "security-and-quality"
+          - "custom-container-security"
+      include_experimental:
+        description: "Include experimental queries"
+        required: false
+        default: false
+        type: boolean
+
+env:
+  # Enhanced security configuration
+  CODEQL_FAIL_ON_ERROR: true
+  CODEQL_ENABLE_EXPERIMENTAL: ${{ github.event.inputs.include_experimental || 'false' }}
+  # Container-specific environment
+  CONTAINER_REGISTRY: "ghcr.io"
+  HADOLINT_VERSION: "2.12.0"
+
+permissions: read-all
+
+jobs:
+  # Pre-analysis security checks
+  container-security-pre-check:
+    name: "🔒 Container Security Pre-Check"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Harden GitHub Actions Runner
+        uses: step-security/harden-runner@5c7944e73c4c2a096b17a9cb74d65b6c2bbafbde # v2.9.1
+        with:
+          egress-policy: audit
+          disable-sudo: true
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+            objects.githubusercontent.com:443
+            registry.npmjs.org:443
+
+      - name: Checkout repository
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+        with:
+          fetch-depth: 0
+
+      - name: Run Dockerfile Security Scan (Hadolint)
+        run: |
+          echo "🔍 Running Dockerfile security analysis..."
+          # Install hadolint
+          wget -qO hadolint "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-Linux-x86_64"
+          chmod +x hadolint
+          
+          # Find and scan all Dockerfiles
+          dockerfiles=$(find . -name "Dockerfile*" -type f | head -20)
+          if [ -n "$dockerfiles" ]; then
+            echo "Found Dockerfiles for analysis:"
+            echo "$dockerfiles"
+            
+            for dockerfile in $dockerfiles; do
+              echo "🔍 Scanning: $dockerfile"
+              ./hadolint "$dockerfile" --format json --no-fail || true
+            done
+          else
+            echo "⚠️ No Dockerfiles found for analysis"
+          fi
+
+      - name: Shell Script Security Check (ShellCheck)
+        run: |
+          echo "🔍 Running shell script security analysis..."
+          
+          # Install shellcheck
+          sudo apt-get update -q
+          sudo apt-get install -y shellcheck
+          
+          # Find and check shell scripts
+          shell_scripts=$(find . -name "*.sh" -type f | head -50)
+          if [ -n "$shell_scripts" ]; then
+            echo "Found shell scripts for analysis:"
+            echo "$shell_scripts"
+            
+            for script in $shell_scripts; do
+              echo "🔍 Checking: $script"
+              shellcheck "$script" --format=json --severity=warning || true
+            done
+          else
+            echo "⚠️ No shell scripts found for analysis"
+          fi
+
+  analyze:
+    name: "🔍 CodeQL Analysis"
+    runs-on: ubuntu-latest
+    needs: container-security-pre-check
+    timeout-minutes: 120
+
+    permissions:
+      # Required for all workflows
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # Multi-language analysis for container projects
+        include:
+          - language: javascript
+            build-mode: none
+          - language: python  
+            build-mode: none
+
+    steps:
+      # Security hardening with enhanced endpoints
+      - name: Harden GitHub Actions Runner
+        uses: step-security/harden-runner@5c7944e73c4c2a096b17a9cb74d65b6c2bbafbde # v2.9.1
+        with:
+          egress-policy: audit
+          disable-sudo: false  # Required for language setup
+          allowed-endpoints: >
+            api.github.com:443
+            auth.docker.io:443
+            production.cloudflare.docker.com:443
+            registry-1.docker.io:443
+            github.com:443
+            objects.githubusercontent.com:443
+            uploads.github.com:443
+            registry.npmjs.org:443
+            nodejs.org:443
+            pypi.org:443
+            files.pythonhosted.org:443
+            download.docker.com:443
+
+      # Checkout repository with enhanced options
+      - name: Checkout repository
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+        with:
+          # Fetch full history for better analysis context
+          fetch-depth: 0
+          # Include submodules if any
+          submodules: recursive
+
+      # Container-specific file discovery
+      - name: Discover Analysis Targets
+        id: discovery
+        run: |
+          echo "🔍 Discovering container project files..."
+          
+          # Count different file types
+          dockerfiles=$(find . -name "Dockerfile*" -type f | wc -l)
+          shell_scripts=$(find . -name "*.sh" -type f | wc -l)
+          python_files=$(find . -name "*.py" -type f | wc -l)
+          js_files=$(find . -name "*.js" -o -name "*.ts" -type f | wc -l)
+          yaml_files=$(find . -name "*.yml" -o -name "*.yaml" -type f | wc -l)
+          
+          echo "📊 Analysis targets found:"
+          echo "  - Dockerfiles: $dockerfiles"
+          echo "  - Shell scripts: $shell_scripts"  
+          echo "  - Python files: $python_files"
+          echo "  - JS/TS files: $js_files"
+          echo "  - YAML files: $yaml_files"
+          
+          # Export for use in other steps
+          echo "dockerfiles=$dockerfiles" >> "$GITHUB_OUTPUT"
+          echo "shell_scripts=$shell_scripts" >> "$GITHUB_OUTPUT"
+          echo "python_files=$python_files" >> "$GITHUB_OUTPUT"
+          echo "js_files=$js_files" >> "$GITHUB_OUTPUT"
+
+      # Initialize CodeQL with enhanced configuration
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@e2b3eafc8d227b0241d48be5f425d47c2d750a13 # v3.26.10
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+          # Enhanced configuration for container projects
+          config-file: ./.github/codeql/codeql-config.yml
+
+          # Container-specific query suites
+          queries: |
+            security-extended
+            security-and-quality
+
+          # Performance optimization
+          debug: false
+          threads: 0
+
+          # Enhanced source root for better analysis
+          source-root: .
+
+      # Language-specific setup for containers
+      - name: Setup Python Environment
+        if: matrix.language == 'python'
+        uses: actions/setup-python@f677139bbe7f9c59b41e40162b753c062f5d49a3 # v5.2.0
+        with:
+          python-version: "3.x"
+          cache: 'pip'
+
+      - name: Setup Node.js Environment  
+        if: matrix.language == 'javascript'
+        uses: actions/setup-node@1e60f620b9541d16bece96c5465dc8ee9832be0b # v4.0.3
+        with:
+          node-version: "20"
+          cache: 'npm'
+
+      # Container dependency analysis
+      - name: Install Container Dependencies
+        run: |
+          echo "📦 Installing container project dependencies..."
+          
+          # Python dependencies
+          if [[ "${{ matrix.language }}" == "python" && -f requirements.txt ]]; then
+            echo "Installing Python dependencies..."
+            pip install --no-deps -r requirements.txt || echo "⚠️ Failed to install Python deps"
+          fi
+          
+          # Node.js dependencies  
+          if [[ "${{ matrix.language }}" == "javascript" && -f package.json ]]; then
+            echo "Installing Node.js dependencies..."
+            npm ci --production --ignore-scripts || echo "⚠️ Failed to install Node.js deps"
+          fi
+          
+          # Shell script analysis tools
+          if [ "${{ steps.discovery.outputs.shell_scripts }}" -gt "0" ]; then
+            echo "Installing shell analysis tools..."
+            sudo apt-get update -q
+            sudo apt-get install -y shellcheck || echo "⚠️ Failed to install shellcheck"
+          fi
+
+      # Perform Enhanced CodeQL Analysis
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@e2b3eafc8d227b0241d48be5f425d47c2d750a13 # v3.26.10
+        with:
+          category: "/language:${{ matrix.language }}/container-security"
+          # Enhanced upload configuration
+          upload: true
+          wait-for-processing: true
+          # Add custom analysis name for better tracking
+          checkout_path: ${{ github.workspace }}
+
+      # Container-specific post-analysis
+      - name: Container Security Summary
+        if: always()
+        run: |
+          echo "🐳 Container Security Analysis Complete"
+          echo "Language: ${{ matrix.language }}"
+          echo "Analysis category: /language:${{ matrix.language }}/container-security"
+          echo "Files analyzed:"
+          echo "  - Dockerfiles: ${{ steps.discovery.outputs.dockerfiles }}"
+          echo "  - Shell scripts: ${{ steps.discovery.outputs.shell_scripts }}"
+          echo "  - Python files: ${{ steps.discovery.outputs.python_files }}"
+          echo "  - JS/TS files: ${{ steps.discovery.outputs.js_files }}"
+
+  # Enhanced summary job with container-specific reporting
+  container-security-summary:
+    name: "📊 Container Security Summary"
+    runs-on: ubuntu-latest
+    needs: [container-security-pre-check, analyze]
+    if: always()
+
+    permissions:
+      security-events: read
+      actions: read
+      contents: read
+
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@5c7944e73c4c2a096b17a9cb74d65b6c2bbafbde # v2.9.1
+        with:
+          egress-policy: audit
+
+      - name: Container Security Analysis Summary
+        run: |
+          # Create comprehensive summary
+          {
+            echo "# � Container Security Analysis Summary"
+            echo ""
+            echo "## 📊 Analysis Results"
+            echo ""
+            
+            # Pre-check results
+            if [ "${{ needs.container-security-pre-check.result }}" == "success" ]; then
+              echo "✅ **Container Pre-Check**: Passed"
+            else
+              echo "❌ **Container Pre-Check**: Failed"
+            fi
+            
+            # CodeQL analysis results
+            if [ "${{ needs.analyze.result }}" == "success" ]; then
+              echo "✅ **CodeQL Analysis**: Completed successfully"
+            else
+              echo "❌ **CodeQL Analysis**: Encountered issues"
+            fi
+            
+            echo ""
+            echo "## 🔍 Security Focus Areas"
+            echo ""
+            echo "- **Dockerfile Security**: Hardening, base image vulnerabilities, privilege escalation"
+            echo "- **Shell Script Security**: Command injection, privilege issues, input validation"
+            echo "- **Container Runtime**: Environment variable leaks, secret management"
+            echo "- **Supply Chain**: Dependency vulnerabilities, build process security"
+            echo ""
+            echo "## 📈 Next Steps"
+            echo ""
+            echo "1. 📋 Review findings in the [Security tab](https://github.com/${{ github.repository }}/security/code-scanning)"
+            echo "2. 🔧 Address high-severity vulnerabilities first"
+            echo "3. 📖 Consult [Container Security Guidelines](docs/SECURITY.md)"
+            echo "4. 🔄 Re-run analysis after fixes"
+            echo ""
+            echo "## 📅 Analysis Metadata"
+            echo ""
+            echo "- **Date**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+            echo "- **Trigger**: ${{ github.event_name }}"
+            echo "- **Branch**: ${{ github.ref_name }}"
+            echo "- **Commit**: ${{ github.sha }}"
+            
+            # Add failure details if needed
+            if [ "${{ needs.analyze.result }}" != "success" ]; then
+              echo ""
+              echo "## ⚠️ Analysis Issues"
+              echo ""
+              echo "Some analysis jobs encountered issues. Please review the workflow logs for details."
+              echo ""
+              echo "Common issues and solutions:"
+              echo "- **Timeout**: Large codebases may need increased timeout values"
+              echo "- **Dependencies**: Missing dependencies can affect analysis quality"
+              echo "- **Permissions**: Ensure proper repository permissions for security scanning"
+            fi
+          } >> "${GITHUB_STEP_SUMMARY}"

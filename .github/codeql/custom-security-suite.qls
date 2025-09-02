@@ -1,0 +1,53 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage <opensource@broadsage.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# Legacy Custom CodeQL Query Suite (Deprecated)
+# Please use custom-container-security.qls for container projects
+
+description: "Legacy security queries for general projects (use custom-container-security.qls for containers)"
+
+queries:
+  # Include standard security queries
+  - include:
+      kind: problem
+      suite: codeql/python-queries/Security
+      severity: error
+  
+  - include:
+      kind: problem  
+      suite: codeql/python-queries/Security
+      severity: warning
+
+  # Include basic custom queries (container-specific queries moved to custom-container-security.qls)
+  - query: custom-queries/hardcoded-credentials.ql
+
+  # Additional security categories
+  - include:
+      kind: problem
+      tags: security
+      severity: error
+  
+  - include:
+      kind: problem
+      tags: security
+      severity: warning
+
+  # Include maintainability issues that could affect security
+  - include:
+      kind: problem
+      tags: maintainability
+      severity: error
+
+# Apply filters
+filters:
+  # Exclude low-confidence results
+  - exclude:
+      precision: low
+  
+  # Focus on security-relevant issues
+  - include:
+      tags: security
+  
+  - include:
+      tags: external/cwe
