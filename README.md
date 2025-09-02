@@ -1,4 +1,5 @@
 # containers
+
 Primary source of truth for the Broadsage Container Images
 
 ## 🚀 Quick Start
@@ -16,6 +17,7 @@ task --version
 ```
 
 ### Common Commands
+
 ```bash
 # Show all available commands
 task --list
@@ -41,7 +43,7 @@ task clean
 
 ## 📁 Project Structure
 
-```
+```bash
 containers/
 ├── .github/workflows/     # CI/CD pipelines
 ├── broadsage/            # Container definitions
@@ -55,21 +57,25 @@ containers/
 ## 🛠️ Development
 
 ### Build Single Container
+
 ```bash
 task build CONTAINER=nginx
 ```
 
 ### Test Single Container
+
 ```bash
 task test CONTAINER=nginx
 ```
 
 ### Security Scan
+
 ```bash
 task security CONTAINER=nginx
 ```
 
 ### Lint Dockerfiles
+
 ```bash
 task lint
 ```
@@ -77,6 +83,7 @@ task lint
 ## 🚀 Why Task?
 
 We migrated from bash scripts to Task for:
+
 - ✅ **Modern syntax** - YAML instead of complex bash
 - ✅ **Cross-platform** - Works on macOS, Linux, Windows
 - ✅ **Better performance** - Built-in parallelization

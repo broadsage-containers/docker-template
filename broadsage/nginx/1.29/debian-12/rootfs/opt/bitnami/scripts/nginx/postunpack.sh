@@ -26,9 +26,9 @@ set -o pipefail
 #   None
 #########################
 nginx_patch_httpoxy_vulnerability() {
-    debug "Unsetting HTTP_PROXY header..."
-    echo '# Unset the HTTP_PROXY header' >>"${NGINX_CONF_DIR}/fastcgi_params"
-    echo 'fastcgi_param  HTTP_PROXY         "";' >>"${NGINX_CONF_DIR}/fastcgi_params"
+  debug "Unsetting HTTP_PROXY header..."
+  echo '# Unset the HTTP_PROXY header' >>"${NGINX_CONF_DIR}/fastcgi_params"
+  echo 'fastcgi_param  HTTP_PROXY         "";' >>"${NGINX_CONF_DIR}/fastcgi_params"
 }
 
 # Load NGINX environment variables
@@ -39,24 +39,24 @@ rm -rf "${BITNAMI_ROOT_DIR}/certs" "${BITNAMI_ROOT_DIR}/server_blocks"
 
 # Context include directories
 NGINX_CONTEXT_INCLUDES=(
-    "main"
-    "events"
-    "http"
+  "main"
+  "events"
+  "http"
 )
 
 # Ensure non-root user has write permissions on a set of directories
 chmod g+w "$NGINX_BASE_DIR"
 for dir in "$NGINX_VOLUME_DIR" "$NGINX_CONF_DIR" "$NGINX_INITSCRIPTS_DIR" "$NGINX_SERVER_BLOCKS_DIR" "$NGINX_STREAM_SERVER_BLOCKS_DIR" "${NGINX_CONF_DIR}/bitnami" "${NGINX_CONF_DIR}/bitnami/certs" "$NGINX_LOGS_DIR" "$NGINX_TMP_DIR" "$NGINX_DEFAULT_CONF_DIR"; do
-    ensure_dir_exists "$dir"
-    chmod -R g+rwX "$dir"
+  ensure_dir_exists "$dir"
+  chmod -R g+rwX "$dir"
 done
 
 # Create context.d directory and context include directories
 ensure_dir_exists "${NGINX_CONF_DIR}/context.d"
 chmod -R g+rwX "${NGINX_CONF_DIR}/context.d"
 for context in "${NGINX_CONTEXT_INCLUDES[@]}"; do
-    ensure_dir_exists "${NGINX_CONF_DIR}/context.d/${context}"
-    chmod -R g+rwX "${NGINX_CONF_DIR}/context.d/${context}"
+  ensure_dir_exists "${NGINX_CONF_DIR}/context.d/${context}"
+  chmod -R g+rwX "${NGINX_CONF_DIR}/context.d/${context}"
 done
 
 # Unset HTTP_PROXY header to protect vs HTTPPOXY vulnerability
@@ -92,4 +92,3 @@ touch /.rnd && chmod g+rw /.rnd
 # Copy all initially generated configuration files to the default directory
 # (this is to avoid breaking when entrypoint is being overridden)
 cp -r "${NGINX_CONF_DIR}"/* "$NGINX_DEFAULT_CONF_DIR"
-

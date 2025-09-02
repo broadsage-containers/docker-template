@@ -1,0 +1,132 @@
+# Copyright Broadcom, Inc. All Rights Reserved.
+# SPDX-License-Identifier: APACHE-2.0
+
+name: "[Support] Auto Label Issues and PRs"
+
+on:
+  issues:
+    types: [opened]
+  pull_request:
+    types: [opened]
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  auto-label:
+    runs-on: ubuntu-latest
+    name: Automatically label issues and PRs
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
+        with:
+          egress-policy: audit
+
+      - name: Label based on title and content
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const issue = context.payload.issue || context.payload.pull_request;
+            const isIssue = !!context.payload.issue;
+            const title = issue.title.toLowerCase();
+            const body = (issue.body || '').toLowerCase();
+            const labels = [];
+
+            // Auto-label based on keywords in title and body
+            const labelRules = {
+              'bug': ['bug', 'error', 'broken', 'crash', 'fail', 'issue', 'problem'],
+              'enhancement': ['feature', 'enhancement', 'improve', 'add', 'new'],
+              'documentation': ['doc', 'readme', 'guide', 'tutorial', 'example'],
+              'security': ['security', 'vulnerability', 'cve', 'exploit', 'malicious'],
+              'dependencies': ['dependency', 'upgrade', 'update', 'bump', 'npm', 'pip'],
+              'good first issue': ['beginner', 'newcomer', 'easy', 'simple', 'starter'],
+              'help wanted': ['help', 'assistance', 'support', 'guidance'],
+              'question': ['question', 'how to', 'what is', 'why', 'clarification']
+            };
+
+            // Check title and body for keywords
+            for (const [label, keywords] of Object.entries(labelRules)) {
+              if (keywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
+                labels.push(label);
+              }
+            }
+
+            // Additional rules for PRs
+            if (!isIssue) {
+              if (title.includes('wip') || title.includes('work in progress') || issue.draft) {
+                labels.push('work-in-progress');
+              }
+              
+              // Check if it's a dependency update
+              if (title.includes('bump') || title.includes('update') || 
+                  title.includes('upgrade') || body.includes('dependabot')) {
+                labels.push('dependencies');
+              }
+            }
+
+            // Priority labeling based on urgency keywords
+            const urgencyKeywords = {
+              'priority-critical': ['critical', 'urgent', 'severe', 'blocker', 'production down'],
+              'priority-high': ['high priority', 'important', 'asap', 'breaking']
+            };
+
+            for (const [label, keywords] of Object.entries(urgencyKeywords)) {
+              if (keywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
+                labels.push(label);
+              }
+            }
+
+            // Apply labels if any were found
+            if (labels.length > 0) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                labels: labels
+              });
+              
+              console.log(`Applied labels: ${labels.join(', ')}`);
+            }
+
+      - name: Welcome first-time contributors
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        if: github.event.action == 'opened'
+        with:
+          script: |
+            const issue = context.payload.issue || context.payload.pull_request;
+            const isIssue = !!context.payload.issue;
+            const author = issue.user.login;
+
+            // Check if this is the user's first contribution
+            const { data: authorIssues } = await github.rest.search.issuesAndPullRequests({
+              q: `author:${author} repo:${context.repo.owner}/${context.repo.repo}`,
+              sort: 'created',
+              order: 'asc',
+              per_page: 1
+            });
+
+            if (authorIssues.total_count === 1) {
+              const welcomeMessage = isIssue ? 
+                `👋 Welcome to the project, @${author}! Thanks for opening your first issue. 
+
+                Please make sure you've provided all the necessary information in the issue template. 
+                A maintainer will review your issue and respond as soon as possible.
+
+                If you're interested in contributing code, check out our [contributing guidelines](../CONTRIBUTING.md).` :
+                `🎉 Welcome @${author}! Thanks for your first pull request to this project!
+
+                A maintainer will review your changes and provide feedback. Please make sure:
+                - [ ] All tests are passing
+                - [ ] You've followed our coding standards
+                - [ ] Documentation is updated if needed
+
+                Thanks for contributing! 🙏`;
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: welcomeMessage
+              });
+            }

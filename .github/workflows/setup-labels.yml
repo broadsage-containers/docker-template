@@ -1,0 +1,75 @@
+# Copyright Broadcom, Inc. All Rights Reserved.
+# SPDX-License-Identifier: APACHE-2.0
+
+name: "[Support] Setup Repository Labels"
+
+on:
+  workflow_dispatch:
+    # Manual trigger only - run once to set up labels
+
+permissions:
+  issues: write
+
+jobs:
+  setup-labels:
+    runs-on: ubuntu-latest
+    name: Setup standard labels
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
+        with:
+          egress-policy: audit
+
+      - name: Setup standard repository labels
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const labels = [
+              { name: 'stale', color: 'fef2c0', description: 'Issues or PRs that have been inactive for a while' },
+              { name: 'pinned', color: 'e1f5fe', description: 'Issues that should never be marked as stale' },
+              { name: 'good first issue', color: '7057ff', description: 'Good for newcomers' },
+              { name: 'help wanted', color: '008672', description: 'Extra attention is needed' },
+              { name: 'priority-high', color: 'ff6b6b', description: 'High priority issue' },
+              { name: 'priority-critical', color: 'ff1744', description: 'Critical priority issue' },
+              { name: 'work-in-progress', color: 'fbca04', description: 'Work in progress' },
+              { name: 'dependencies', color: '0366d6', description: 'Pull requests that update dependencies' },
+              { name: 'security', color: 'd73a4a', description: 'Security related issues' },
+              { name: 'enhancement', color: 'a2eeef', description: 'New feature or request' },
+              { name: 'bug', color: 'd73a4a', description: 'Something is not working' },
+              { name: 'documentation', color: '0075ca', description: 'Improvements or additions to documentation' },
+              { name: 'duplicate', color: 'cfd3d7', description: 'This issue or pull request already exists' },
+              { name: 'invalid', color: 'e4e669', description: 'This does not seem right' },
+              { name: 'question', color: 'd876e3', description: 'Further information is requested' },
+              { name: 'wontfix', color: 'ffffff', description: 'This will not be worked on' }
+            ];
+
+            for (const label of labels) {
+              try {
+                await github.rest.issues.createLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: label.name,
+                  color: label.color,
+                  description: label.description
+                });
+                console.log(`✅ Created label: ${label.name}`);
+              } catch (error) {
+                if (error.status === 422) {
+                  // Label already exists, try to update it
+                  try {
+                    await github.rest.issues.updateLabel({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      name: label.name,
+                      color: label.color,
+                      description: label.description
+                    });
+                    console.log(`🔄 Updated label: ${label.name}`);
+                  } catch (updateError) {
+                    console.log(`⚠️ Could not update label ${label.name}: ${updateError.message}`);
+                  }
+                } else {
+                  console.log(`❌ Error creating label ${label.name}: ${error.message}`);
+                }
+              }
+            }

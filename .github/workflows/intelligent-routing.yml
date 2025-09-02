@@ -1,0 +1,239 @@
+# Copyright Broadcom, Inc. All Rights Reserved.
+# SPDX-License-Identifier: APACHE-2.0
+
+name: "[Support] Intelligent Issue Routing"
+
+on:
+  issues:
+    types: [opened]
+  pull_request:
+    types: [opened]
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  intelligent-routing:
+    runs-on: ubuntu-latest
+    name: Route issues to appropriate teams
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
+        with:
+          egress-policy: audit
+
+      - name: Analyze and route issue
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const issue = context.payload.issue || context.payload.pull_request;
+            const isIssue = !!context.payload.issue;
+            const title = issue.title.toLowerCase();
+            const body = (issue.body || '').toLowerCase();
+            const labels = [];
+            const comments = [];
+
+            // Content analysis rules for automatic routing
+            const routingRules = {
+              // Container and Docker related
+              'container': {
+                keywords: ['docker', 'dockerfile', 'container', 'image', 'registry', 'buildx', 'buildkit'],
+                labels: ['area/containers', 'component/docker'],
+                team: 'containers-team',
+                message: '🐳 **Container/Docker Issue Detected**\n\nThis appears to be related to containers or Docker. The containers team has been notified.'
+              },
+              
+              // Security related
+              'security': {
+                keywords: ['security', 'vulnerability', 'cve', 'exploit', 'malicious', 'attack', 'breach', 'unauthorized'],
+                labels: ['security', 'priority-high'],
+                team: 'security-team',
+                message: '🔒 **Security Issue Detected**\n\nThis has been flagged as a security-related issue and escalated to the security team.'
+              },
+              
+              // Build and CI/CD
+              'build': {
+                keywords: ['build', 'compile', 'ci/cd', 'pipeline', 'github actions', 'workflow', 'automation'],
+                labels: ['area/build', 'component/ci'],
+                team: 'devops-team',
+                message: '🔨 **Build/CI Issue Detected**\n\nThis appears to be related to builds or CI/CD. The DevOps team has been notified.'
+              },
+              
+              // Documentation
+              'documentation': {
+                keywords: ['documentation', 'readme', 'docs', 'guide', 'tutorial', 'example', 'instructions'],
+                labels: ['documentation', 'good first issue'],
+                team: 'docs-team',
+                message: '📚 **Documentation Issue Detected**\n\nThis appears to be documentation-related. The documentation team has been notified.'
+              },
+            };
+
+            // Analyze content and apply rules
+            let matchedCategory = null;
+            for (const [category, rule] of Object.entries(routingRules)) {
+              const hasKeyword = rule.keywords.some(keyword => 
+                title.includes(keyword) || body.includes(keyword)
+              );
+              
+              if (hasKeyword) {
+                matchedCategory = category;
+                labels.push(...rule.labels);
+                comments.push(rule.message);
+                break; // Apply only the first matching rule
+              }
+            }
+
+            // Special handling for specific patterns
+
+            // Check for version-specific issues
+            const versionMatch = body.match(/version[:\s]+([0-9]+\.[0-9]+(?:\.[0-9]+)?)/i);
+            if (versionMatch) {
+              labels.push(`version/${versionMatch[1]}`);
+              comments.push(`🏷️ **Version Detected**: This issue is related to version \`${versionMatch[1]}\``);
+            }
+
+            // Check for environment-specific issues
+            const envKeywords = {
+              'env/kubernetes': ['kubernetes', 'k8s', 'kubectl', 'helm', 'pod'],
+              'env/docker-compose': ['docker-compose', 'compose', 'docker compose'],
+              'env/production': ['production', 'prod', 'live'],
+              'env/development': ['development', 'dev', 'local']
+            };
+
+            for (const [envLabel, keywords] of Object.entries(envKeywords)) {
+              if (keywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
+                labels.push(envLabel);
+                break;
+              }
+            }
+
+            // Platform detection
+            const platformKeywords = {
+              'platform/linux': ['linux', 'ubuntu', 'debian', 'centos', 'rhel'],
+              'platform/windows': ['windows', 'win32', 'win64'],
+              'platform/macos': ['macos', 'mac os', 'darwin'],
+              'arch/arm64': ['arm64', 'aarch64', 'apple silicon', 'm1', 'm2'],
+              'arch/amd64': ['amd64', 'x86_64', 'intel']
+            };
+
+            for (const [platformLabel, keywords] of Object.entries(platformKeywords)) {
+              if (keywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
+                labels.push(platformLabel);
+              }
+            }
+
+            // Severity assessment
+            const severityKeywords = {
+              'severity/critical': ['critical', 'urgent', 'production down', 'outage', 'data loss'],
+              'severity/high': ['major', 'severe', 'blocking', 'regression'],
+              'severity/medium': ['important', 'significant'],
+              'severity/low': ['minor', 'cosmetic', 'enhancement']
+            };
+
+            for (const [severityLabel, keywords] of Object.entries(severityKeywords)) {
+              if (keywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
+                labels.push(severityLabel);
+                break;
+              }
+            }
+
+            // Apply labels
+            if (labels.length > 0) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                labels: [...new Set(labels)] // Remove duplicates
+              });
+            }
+
+            // Post routing information
+            if (comments.length > 0) {
+              const routingComment = `🤖 **Automated Issue Routing**
+
+              ${comments.join('\n\n')}
+
+              **Applied Labels:** ${labels.length > 0 ? labels.map(l => `\`${l}\``).join(', ') : 'None'}
+
+              ${matchedCategory ? `**Routing Category:** \`${matchedCategory}\`` : ''}
+
+              ---
+              
+              💡 **Next Steps:**
+              - A team member will review this issue
+              - You may be asked for additional information
+              - Check back for updates and respond promptly
+
+              *This routing was performed automatically. If you believe this is incorrect, please let us know!*`;
+              
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: routingComment
+              });
+            }
+
+            // Log routing decision
+            console.log(`📊 Issue Routing Summary:
+            - Issue: #${issue.number}
+            - Category: ${matchedCategory || 'unclassified'}
+            - Labels Applied: ${labels.join(', ') || 'none'}
+            - Auto-routed: ${comments.length > 0 ? 'yes' : 'no'}
+            `);
+
+      - name: Handle duplicate detection
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        if: github.event_name == 'issues'
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const title = issue.title.toLowerCase();
+            const body = (issue.body || '').toLowerCase();
+
+            // Search for similar issues
+            const searchQuery = `repo:${context.repo.owner}/${context.repo.repo} is:issue "${title.slice(0, 50)}"`;
+
+            try {
+              const { data: similarIssues } = await github.rest.search.issuesAndPullRequests({
+                q: searchQuery,
+                sort: 'created',
+                order: 'desc',
+                per_page: 5
+              });
+              
+              // Filter out the current issue and check for potential duplicates
+              const otherIssues = similarIssues.items.filter(item => item.number !== issue.number);
+              
+              if (otherIssues.length > 0) {
+                const duplicateCheck = `🔍 **Potential Duplicate Check**
+
+                I found ${otherIssues.length} similar issue(s) that might be related:
+
+                ${otherIssues.map((item, index) => 
+                  `${index + 1}. #${item.number} - [${item.title}](${item.html_url}) ${item.state === 'closed' ? '(Closed)' : '(Open)'}`
+                ).join('\n')}
+
+                **Please check if any of these issues are duplicates before proceeding.**
+
+                If this is indeed a duplicate:
+                - Reference the original issue in a comment
+                - Close this issue with the \`duplicate\` label
+
+                If this is a new issue:
+                - Provide additional context that differentiates it
+                - Reference related issues for context
+
+                *This check was performed automatically to help maintain a clean issue tracker.*`;
+                
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  body: duplicateCheck
+                });
+              }
+            } catch (error) {
+              console.log(`Could not perform duplicate check: ${error.message}`);
+            }

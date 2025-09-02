@@ -7,24 +7,28 @@ Your CI/CD pipeline has been completely refactored with enterprise-grade best pr
 ## 🎯 Key Improvements
 
 ### 🔒 **Security First**
+
 - **Vulnerability Scanning**: Trivy integration with SARIF reporting
 - **Container Signing**: Cosign for image authenticity
 - **SBOM Generation**: Complete software bill of materials
 - **Security Gates**: Automated security policy enforcement
 
 ### 🏗️ **Enterprise Build System**
+
 - **Multi-Architecture**: ARM64 + AMD64 support out of the box
 - **Intelligent Caching**: Advanced Docker layer caching
 - **Matrix Builds**: Parallel container builds for speed
 - **Smart Discovery**: Only builds changed containers
 
 ### 🧪 **Comprehensive Testing**
+
 - **Functional Tests**: Application-specific health checks
 - **Security Tests**: Runtime security validation
 - **Integration Tests**: End-to-end service testing
 - **Performance Tests**: Resource and load validation
 
 ### 📊 **Observability & Monitoring**
+
 - **Rich Summaries**: Detailed build and security reports
 - **Status Integration**: GitHub commit status updates
 - **Failure Analysis**: Comprehensive error reporting
@@ -53,6 +57,7 @@ containers/
 ## 🚀 Getting Started
 
 ### 1. **Test Locally**
+
 ```bash
 # Test the new build system
 ./scripts/build-all.sh --help
@@ -65,6 +70,7 @@ containers/
 ```
 
 ### 2. **Migrate Your Pipeline**
+
 ```bash
 # Run the migration script
 ./scripts/migrate-pipeline.sh
@@ -74,6 +80,7 @@ cat MIGRATION_REPORT.md
 ```
 
 ### 3. **Commit and Test**
+
 ```bash
 # Commit all changes
 git add .
@@ -107,16 +114,19 @@ git push origin test/enterprise-pipeline
 ## 🔍 New Workflow Features
 
 ### **Manual Dispatch**
+
 - Force build all containers
 - Build specific containers
 - Push to registry option
 
 ### **Automatic Triggers**
+
 - PR creation/updates
 - Main branch pushes
 - Weekly security scans
 
 ### **Security Integration**
+
 - GitHub Security tab integration
 - SARIF report uploads
 - Automated vulnerability alerts
@@ -137,17 +147,20 @@ git push origin test/enterprise-pipeline
 ## 🆘 Need Help?
 
 ### **Documentation**
+
 - 📖 **Detailed Guide**: `ENTERPRISE_PIPELINE.md`
 - 🔧 **Scripts Help**: `scripts/README.md`
 - 📋 **Templates**: `templates/README.md`
 
 ### **Common Issues**
+
 1. **Build Failures**: Check GitHub Actions logs
 2. **Permission Issues**: Verify GITHUB_TOKEN permissions
 3. **Registry Issues**: Ensure GHCR access is enabled
 4. **Linting Errors**: Review `.hadolint.yaml` configuration
 
 ### **Support Channels**
+
 - GitHub Issues for bugs
 - GitHub Discussions for questions
 - Team Slack for internal support

@@ -1,19 +1,19 @@
-name: '[CI/CD] Release Pipeline'
+name: "[CI/CD] Release Pipeline"
 
 on:
   workflow_dispatch:
     inputs:
       force_build:
-        description: 'Force build all containers'
+        description: "Force build all containers"
         required: false
         default: false
         type: boolean
       containers_filter:
-        description: 'Comma-separated list of containers to build (e.g., nginx,apache)'
+        description: "Comma-separated list of containers to build (e.g., nginx,apache)"
         required: false
         type: string
       push_images:
-        description: 'Push images to registry'
+        description: "Push images to registry"
         required: false
         default: false
         type: boolean
@@ -21,7 +21,7 @@ on:
     branches: [main]
   schedule:
     # Run weekly security scans
-    - cron: '0 2 * * 0'
+    - cron: "0 2 * * 0"
 
 permissions:
   contents: read
@@ -90,24 +90,24 @@ jobs:
           CONTAINERS_FILTER: ${{ github.event.inputs.containers_filter }}
         run: |
           set -euo pipefail
-          
+
           echo "Debug: Changed files: $CHANGED_FILES"
           echo "Debug: Force build: $FORCE_BUILD"
           echo "Debug: Containers filter: $CONTAINERS_FILTER"
           echo "Debug: Event name: ${{ github.event_name }}"
-          
+
           # Initialize containers array
           containers=()
-          
+
           if [[ "$FORCE_BUILD" == "true" || "${{ github.event_name }}" == "schedule" ]]; then
             echo "Force build or scheduled run - discovering all containers"
-            containers=($(find broadsage -name "Dockerfile" -type f | grep -E "broadsage/[^/]+/[^/]+/[^/]+/Dockerfile$" | sed 's|/Dockerfile||g' | sort))
+            mapfile -t containers < <(find broadsage -name "Dockerfile" -type f | grep -E "broadsage/[^/]+/[^/]+/[^/]+/Dockerfile$" | sed 's|/Dockerfile||g' | sort)
           elif [[ -n "$CONTAINERS_FILTER" ]]; then
             echo "Using container filter: $CONTAINERS_FILTER"
             IFS=',' read -ra FILTER_ARRAY <<< "$CONTAINERS_FILTER"
             for filter in "${FILTER_ARRAY[@]}"; do
               filter=$(echo "$filter" | xargs) # trim whitespace
-              found_containers=($(find broadsage -name "Dockerfile" -type f | grep -E "broadsage/$filter/[^/]+/[^/]+/Dockerfile$" | sed 's|/Dockerfile||g' | sort))
+              mapfile -t found_containers < <(find broadsage -name "Dockerfile" -type f | grep -E "broadsage/$filter/[^/]+/[^/]+/Dockerfile$" | sed 's|/Dockerfile||g' | sort)
               containers+=("${found_containers[@]}")
             done
           else
@@ -124,10 +124,10 @@ jobs:
               fi
             done
           fi
-          
+
           # Remove duplicates and create matrix
           if [[ ${#containers[@]} -gt 0 ]]; then
-            unique_containers=($(printf "%s\n" "${containers[@]}" | sort -u))
+            mapfile -t unique_containers < <(printf "%s\n" "${containers[@]}" | sort -u)
             echo "Found containers to build: ${unique_containers[*]}"
             
             # Generate JSON matrix
@@ -146,13 +146,13 @@ jobs:
             done
             matrix_json+="]"
             
-            echo "matrix={\"include\":$matrix_json}" >> $GITHUB_OUTPUT
-            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "matrix={\"include\":$matrix_json}" >> "$GITHUB_OUTPUT"
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
             echo "Generated matrix: $matrix_json"
           else
             echo "No containers found to build"
-            echo "matrix={\"include\":[]}" >> $GITHUB_OUTPUT
-            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "matrix={\"include\":[]}" >> "$GITHUB_OUTPUT"
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
           fi
 
   # Lint and validate Dockerfiles
@@ -240,10 +240,10 @@ jobs:
           PLATFORM: ${{ matrix.platform }}
         run: |
           set -euo pipefail
-          
+
           # Generate image name
           image_name="${REGISTRY}/${IMAGE_NAMESPACE}/${APP}"
-          
+
           # Generate tags
           if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
             # Production tags for main branch
@@ -260,10 +260,10 @@ jobs:
             tags="${image_name}:${VERSION}-${PLATFORM}-${short_sha}"
             tags="${tags},${image_name}:dev-${short_sha}"
           fi
-          
-          echo "image_name=${image_name}" >> $GITHUB_OUTPUT
-          echo "tags=${tags}" >> $GITHUB_OUTPUT
-          
+
+          echo "image_name=${image_name}" >> "$GITHUB_OUTPUT"
+          echo "tags=${tags}" >> "$GITHUB_OUTPUT"
+
           # Generate labels
           labels=$(cat <<EOF
           org.opencontainers.image.title=${APP}
@@ -278,11 +278,11 @@ jobs:
           org.opencontainers.image.base.name=docker.io/bitnami/minideb:bookworm
           EOF
           )
-          
+
           # Convert labels to single line for output
           labels_single_line=$(echo "$labels" | tr '\n' ',' | sed 's/,$//')
-          echo "labels=${labels_single_line}" >> $GITHUB_OUTPUT
-          
+          echo "labels=${labels_single_line}" >> "$GITHUB_OUTPUT"
+
           echo "Generated metadata for ${CONTAINER}:"
           echo "  Image: ${image_name}"
           echo "  Tags: ${tags}"
@@ -306,11 +306,11 @@ jobs:
         run: |
           set -euo pipefail
           echo "Testing container functionality..."
-          
+
           # Basic container health check
           docker run --rm --name test-container -d test-image:latest
           sleep 5
-          
+
           # Check if container is running
           if docker ps | grep -q test-container; then
             echo "✅ Container is running successfully"
@@ -325,8 +325,8 @@ jobs:
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # master
         with:
           image-ref: test-image:latest
-          format: 'sarif'
-          output: 'trivy-results.sarif'
+          format: "sarif"
+          output: "trivy-results.sarif"
 
       - name: Upload Trivy scan results
         uses: github/codeql-action/upload-sarif@1b1aada464948af03b950897e5eb522f92603cc2 # v3.24.9
@@ -339,33 +339,37 @@ jobs:
         if: always()
         run: |
           set -euo pipefail
-          
-          echo "## 🔒 Security Scan Results" >> $GITHUB_STEP_SUMMARY
-          echo "**Container:** ${{ matrix.container }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Image:** ${{ steps.build-metadata.outputs.image_name }}" >> $GITHUB_STEP_SUMMARY
-          
+
+          {
+            echo "## 🔒 Security Scan Results"
+            echo "**Container:** ${{ matrix.container }}"
+            echo "**Image:** ${{ steps.build-metadata.outputs.image_name }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
           if [[ -f "trivy-results.sarif" ]]; then
             # Parse SARIF results
-            critical_count=$(jq -r '.runs[0].results[]? | select(.level=="error") | .ruleId' trivy-results.sarif 2>/dev/null | wc -l || echo "0")
-            high_count=$(jq -r '.runs[0].results[]? | select(.level=="warning") | .ruleId' trivy-results.sarif 2>/dev/null | wc -l || echo "0")
-            
-            echo "| Severity | Count |" >> $GITHUB_STEP_SUMMARY
-            echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
-            echo "| Critical | $critical_count |" >> $GITHUB_STEP_SUMMARY
-            echo "| High | $high_count |" >> $GITHUB_STEP_SUMMARY
+            {
+              critical_count=$(jq -r '.runs[0].results[]? | select(.level=="error") | .ruleId' trivy-results.sarif 2>/dev/null | wc -l || echo "0")
+              high_count=$(jq -r '.runs[0].results[]? | select(.level=="warning") | .ruleId' trivy-results.sarif 2>/dev/null | wc -l || echo "0")
+              
+              echo "| Severity | Count |"
+              echo "|----------|-------|"
+              echo "| Critical | $critical_count |"
+              echo "| High | $high_count |"
+            } >> "$GITHUB_STEP_SUMMARY"
             
             if [[ "$critical_count" -gt 0 ]]; then
-              echo "⚠️ **Critical vulnerabilities found!**" >> $GITHUB_STEP_SUMMARY
-              echo "critical_vulns=true" >> $GITHUB_OUTPUT
+              echo "⚠️ **Critical vulnerabilities found!**" >> "$GITHUB_STEP_SUMMARY"
+              echo "critical_vulns=true" >> "$GITHUB_OUTPUT"
             elif [[ "$high_count" -gt 0 ]]; then
-              echo "⚠️ **High severity vulnerabilities found**" >> $GITHUB_STEP_SUMMARY
-              echo "high_vulns=true" >> $GITHUB_OUTPUT
+              echo "⚠️ **High severity vulnerabilities found**" >> "$GITHUB_STEP_SUMMARY"
+              echo "high_vulns=true" >> "$GITHUB_OUTPUT"
             else
-              echo "✅ **No critical or high severity vulnerabilities found**" >> $GITHUB_STEP_SUMMARY
-              echo "clean_scan=true" >> $GITHUB_OUTPUT
+              echo "✅ **No critical or high severity vulnerabilities found**" >> "$GITHUB_STEP_SUMMARY"
+              echo "clean_scan=true" >> "$GITHUB_OUTPUT"
             fi
           else
-            echo "❌ **Security scan failed**" >> $GITHUB_STEP_SUMMARY
+            echo "❌ **Security scan failed**" >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Build multi-platform image (production)
@@ -391,8 +395,8 @@ jobs:
         uses: anchore/sbom-action@e8d2a6937ecead383dfe75190d104edd1f9c5751 # v0.16.0
         with:
           image: ${{ steps.build-metadata.outputs.image_name }}@${{ steps.push.outputs.digest }}
-          format: 'spdx-json'
-          output-file: 'sbom.spdx.json'
+          format: "spdx-json"
+          output-file: "sbom.spdx.json"
 
       - name: Attest SBOM
         if: steps.push.outcome == 'success'
@@ -401,7 +405,7 @@ jobs:
         with:
           subject-name: ${{ steps.build-metadata.outputs.image_name }}
           subject-digest: ${{ steps.push.outputs.digest }}
-          sbom-path: 'sbom.spdx.json'
+          sbom-path: "sbom.spdx.json"
           push-to-registry: true
 
       - name: Install Cosign for additional signing
@@ -414,45 +418,47 @@ jobs:
           COSIGN_EXPERIMENTAL: 1
         run: |
           image_ref="${{ steps.build-metadata.outputs.image_name }}@${{ steps.push.outputs.digest }}"
-          
+
           # Sign the image
           cosign sign --yes "${image_ref}"
-          
+
           # Verify the signature (optional verification step)
           cosign verify "${image_ref}" \
             --certificate-identity-regexp=".*" \
             --certificate-oidc-issuer-regexp=".*" || echo "Verification skipped for workflow context"
-          
+
           echo "✅ Signed image: ${image_ref}"
 
       - name: Generate build artifacts summary
         if: steps.push.outcome == 'success'
         run: |
           image_ref="${{ steps.build-metadata.outputs.image_name }}@${{ steps.push.outputs.digest }}"
-          
-          echo "## 📦 Build Artifacts for ${{ matrix.container }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Image:** \`${image_ref}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Tags:** ${{ steps.build-metadata.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Digest:** \`${{ steps.push.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🔒 Security Features Enabled" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ **SBOM Generated**: Software Bill of Materials created and attested" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ **Build Provenance**: Build metadata recorded automatically" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ **Image Signed**: Container image signed with Cosign" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ **GitHub Attestations**: Build provenance and SBOM attestations available" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ **Registry Integration**: Attestations pushed to container registry" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🔍 Verification Commands" >> $GITHUB_STEP_SUMMARY
-          echo '```bash' >> $GITHUB_STEP_SUMMARY
-          echo "# Verify signature" >> $GITHUB_STEP_SUMMARY
-          echo "cosign verify ${image_ref} --certificate-identity-regexp=\".*\" --certificate-oidc-issuer-regexp=\".*\"" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "# Download SBOM" >> $GITHUB_STEP_SUMMARY
-          echo "cosign download sbom ${image_ref}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "# View attestations" >> $GITHUB_STEP_SUMMARY
-          echo "gh attestation list --repo ${{ github.repository }}" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
+
+          {
+            echo "## 📦 Build Artifacts for ${{ matrix.container }}"
+            echo "**Image:** \`${image_ref}\`"
+            echo "**Tags:** ${{ steps.build-metadata.outputs.tags }}"
+            echo "**Digest:** \`${{ steps.push.outputs.digest }}\`"
+            echo ""
+            echo "### 🔒 Security Features Enabled"
+            echo "- ✅ **SBOM Generated**: Software Bill of Materials created and attested"
+            echo "- ✅ **Build Provenance**: Build metadata recorded automatically"
+            echo "- ✅ **Image Signed**: Container image signed with Cosign"
+            echo "- ✅ **GitHub Attestations**: Build provenance and SBOM attestations available"
+            echo "- ✅ **Registry Integration**: Attestations pushed to container registry"
+            echo ""
+            echo "### 🔍 Verification Commands"
+            echo '```bash'
+            echo "# Verify signature"
+            echo "cosign verify ${image_ref} --certificate-identity-regexp=\".*\" --certificate-oidc-issuer-regexp=\".*\""
+            echo ""
+            echo "# Download SBOM"
+            echo "cosign download sbom ${image_ref}"
+            echo ""
+            echo "# View attestations"
+            echo "gh attestation list --repo ${{ github.repository }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # Comprehensive build summary
   build-summary:
@@ -478,10 +484,10 @@ jobs:
               repo: context.repo.repo,
               run_id: context.runId
             });
-            
+
             let state = 'success';
             let description = 'All containers built and tested successfully!';
-            
+
             if ('${{ needs.discover-containers.result }}' !== 'success') {
               state = 'error';
               description = 'Container discovery failed';
@@ -492,10 +498,10 @@ jobs:
               state = 'error';
               description = 'Container build or tests failed';
             }
-            
+
             // Determine SHA for status
             const sha = context.payload.pull_request?.head.sha || context.sha;
-            
+
             await github.rest.repos.createCommitStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -505,7 +511,7 @@ jobs:
               description: description,
               context: 'Enterprise Container Pipeline'
             });
-            
+
             core.summary.addHeading('🚀 Enterprise Container Build Summary');
             core.summary.addTable([
               [{data: 'Status', header: true}, {data: 'Value', header: true}],
