@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage <opensource@broadsage.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+version = 1
+
+# configurations
+[[annotations]]
+path = [".github/pull_request_template.md",".markdownlint.json"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "Copyright (c) 2025 Broadsage <opensource@broadsage.com>"
+SPDX-License-Identifier = "Apache-2.0"
+
+# images etc
+[[annotations]]
+path = ["assets/*.png"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "Copyright (c) 2025 Broadsage <opensource@broadsage.com>"
+SPDX-License-Identifier = "Apache-2.0"

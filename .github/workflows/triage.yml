@@ -1,7 +1,7 @@
 # Copyright Broadcom, Inc. All Rights Reserved.
 # SPDX-License-Identifier: APACHE-2.0
 
-name: '[Support] Issue and PR Triage'
+name: "[Support] Issue and PR Triage"
 
 on:
   issues:
@@ -10,11 +10,11 @@ on:
     types: [opened, edited, labeled, unlabeled, ready_for_review]
   schedule:
     # Run triage check every 6 hours
-    - cron: '0 */6 * * *'
+    - cron: "0 */6 * * *"
   workflow_dispatch:
     inputs:
       issue_number:
-        description: 'Specific issue number to triage (optional)'
+        description: "Specific issue number to triage (optional)"
         required: false
         type: string
 
@@ -45,12 +45,12 @@ jobs:
             const body = issue.body || '';
             const title = issue.title;
             const labels = [];
-            
+
             // Check if issue follows template structure
             const hasEnvironmentSection = body.includes('Environment') || body.includes('environment');
             const hasStepsToReproduce = body.includes('Steps') || body.includes('reproduce');
             const hasExpectedBehavior = body.includes('Expected') || body.includes('expected');
-            
+
             // Validate bug reports
             if (title.toLowerCase().includes('bug') || body.toLowerCase().includes('bug')) {
               if (!hasEnvironmentSection || !hasStepsToReproduce || !hasExpectedBehavior) {
@@ -75,7 +75,7 @@ jobs:
                 });
               }
             }
-            
+
             // Check for incomplete issues
             if (body.length < 50 || title.length < 10) {
               labels.push('needs-info');
@@ -96,7 +96,7 @@ jobs:
                 The more context you provide, the better we can help! 🙌`
               });
             }
-            
+
             // Apply labels if any
             if (labels.length > 0) {
               await github.rest.issues.addLabels({
@@ -117,13 +117,13 @@ jobs:
             const title = pr.title;
             const labels = [];
             const comments = [];
-            
+
             // Check PR description completeness
             const hasDescription = body.length > 50;
             const hasRelatedIssue = body.includes('#') || body.includes('fixes') || body.includes('closes');
             const hasTestingInfo = body.includes('test') || body.includes('Test');
             const hasChangeType = body.includes('- [x]') || body.includes('- [X]');
-            
+
             if (!hasDescription) {
               labels.push('needs-info');
               comments.push(`📝 **PR Description Needed**
@@ -134,7 +134,7 @@ jobs:
               - 🧪 How it was tested
               - 📋 Any breaking changes or special considerations`);
             }
-            
+
             if (!hasRelatedIssue && !pr.title.toLowerCase().includes('chore')) {
               comments.push(`🔗 **Link to Issue**
               
@@ -145,16 +145,16 @@ jobs:
               
               If no issue exists, consider creating one first to discuss the changes! 💭`);
             }
-            
+
             // Check for large PRs
             const { data: files } = await github.rest.pulls.listFiles({
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: pr.number
             });
-            
+
             const totalChanges = files.reduce((sum, file) => sum + file.additions + file.deletions, 0);
-            
+
             if (totalChanges > 500) {
               labels.push('large-pr');
               comments.push(`📏 **Large PR Detected**
@@ -168,13 +168,13 @@ jobs:
               
               If this size is necessary, please explain why in the PR description. 🤔`);
             }
-            
+
             // Check for missing tests (if not docs/config only)
             const hasCodeChanges = files.some(file => 
               file.filename.match(/\.(js|ts|py|go|java|cpp|c|rs|php)$/));
             const hasTestChanges = files.some(file => 
               file.filename.includes('test') || file.filename.includes('spec'));
-            
+
             if (hasCodeChanges && !hasTestChanges && !pr.title.toLowerCase().includes('docs')) {
               labels.push('needs-tests');
               comments.push(`🧪 **Tests Needed**
@@ -186,7 +186,7 @@ jobs:
               
               If tests aren't needed, please explain why in the PR description. 🤓`);
             }
-            
+
             // Apply labels
             if (labels.length > 0) {
               await github.rest.issues.addLabels({
@@ -196,7 +196,7 @@ jobs:
                 labels: labels
               });
             }
-            
+
             // Post combined comment if there are suggestions
             if (comments.length > 0) {
               const combinedComment = `👋 **Automated PR Triage**
@@ -230,17 +230,17 @@ jobs:
             const title = issue.title.toLowerCase();
             const body = (issue.body || '').toLowerCase();
             const labels = [];
-            
+
             // Critical issue keywords
             const criticalKeywords = [
               'critical', 'urgent', 'production', 'outage', 'down', 'broken',
               'security', 'vulnerability', 'exploit', 'cve', 'data loss'
             ];
-            
+
             const highPriorityKeywords = [
               'regression', 'breaking', 'blocker', 'severe', 'major'
             ];
-            
+
             // Check for critical issues
             if (criticalKeywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
               labels.push('priority-critical');
@@ -268,7 +268,7 @@ jobs:
             } else if (highPriorityKeywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
               labels.push('priority-high');
             }
-            
+
             // Apply priority labels
             if (labels.length > 0) {
               await github.rest.issues.addLabels({
@@ -291,13 +291,13 @@ jobs:
               order: 'desc',
               per_page: 10
             });
-            
+
             // Find old issues without response
             const { data: staleIssues } = await github.rest.search.issuesAndPullRequests({
               q: `repo:${context.repo.owner}/${context.repo.repo} is:open is:issue comments:0 created:<${new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}`,
               per_page: 5
             });
-            
+
             if (needsTriageIssues.total_count > 0 || staleIssues.total_count > 0) {
               console.log(`📊 Triage Report:
               - ${needsTriageIssues.total_count} recent issues need triage
@@ -323,7 +323,7 @@ jobs:
             // Generate triage statistics
             const now = new Date();
             const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-            
+
             const queries = {
               'new_issues': `repo:${context.repo.owner}/${context.repo.repo} is:issue created:>=${oneWeekAgo.toISOString().split('T')[0]}`,
               'new_prs': `repo:${context.repo.owner}/${context.repo.repo} is:pr created:>=${oneWeekAgo.toISOString().split('T')[0]}`,
@@ -331,23 +331,23 @@ jobs:
               'needs_triage': `repo:${context.repo.owner}/${context.repo.repo} is:open is:issue -label:triaged -label:wontfix`,
               'critical_open': `repo:${context.repo.owner}/${context.repo.repo} is:open is:issue label:priority-critical`
             };
-            
+
             const stats = {};
             for (const [key, query] of Object.entries(queries)) {
               const { data } = await github.rest.search.issuesAndPullRequests({ q: query, per_page: 1 });
               stats[key] = data.total_count;
             }
-            
+
             console.log(`📈 Weekly Triage Metrics:
             📥 New Issues: ${stats.new_issues}
             🔄 New PRs: ${stats.new_prs}  
             ✅ Triaged: ${stats.triaged_issues}
             ⏳ Needs Triage: ${stats.needs_triage}
             🚨 Critical Open: ${stats.critical_open}
-            
+
             📊 Triage Rate: ${stats.new_issues > 0 ? Math.round((stats.triaged_issues / stats.new_issues) * 100) : 0}%
             `);
-            
+
             // Create issue if triage backlog is high
             if (stats.needs_triage > 20) {
               await github.rest.issues.create({

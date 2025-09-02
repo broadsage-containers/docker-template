@@ -1,4 +1,4 @@
-name: '[PR] Pull Request Validation'
+name: "[PR] Pull Request Validation"
 
 on:
   pull_request:
@@ -56,15 +56,15 @@ jobs:
           CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
         run: |
           set -euo pipefail
-          
+
           echo "Debug: Changed files: $CHANGED_FILES"
           echo "Debug: Event name: ${{ github.event_name }}"
-          
+
           # Initialize containers array
           containers=()
-          
+
           echo "Discovering containers from changed files"
-          
+
           # Regular event handling
           for file in $CHANGED_FILES; do
             # Extract container path pattern: broadsage/{app}/{version}/{platform}
@@ -75,10 +75,10 @@ jobs:
               fi
             fi
           done
-          
+
           # Remove duplicates and create matrix
           if [[ ${#containers[@]} -gt 0 ]]; then
-            unique_containers=($(printf "%s\n" "${containers[@]}" | sort -u))
+            mapfile -t unique_containers < <(printf "%s\n" "${containers[@]}" | sort -u)
             echo "Found containers to build: ${unique_containers[*]}"
             
             # Generate JSON matrix
@@ -97,13 +97,13 @@ jobs:
             done
             matrix_json+="]"
             
-            echo "matrix={\"include\":$matrix_json}" >> $GITHUB_OUTPUT
-            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "matrix={\"include\":$matrix_json}" >> "$GITHUB_OUTPUT"
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
             echo "Generated matrix: $matrix_json"
           else
             echo "No containers found to build"
-            echo "matrix={\"include\":[]}" >> $GITHUB_OUTPUT
-            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "matrix={\"include\":[]}" >> "$GITHUB_OUTPUT"
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
           fi
 
   # Lint and validate Dockerfiles
@@ -175,17 +175,17 @@ jobs:
           PLATFORM: ${{ matrix.platform }}
         run: |
           set -euo pipefail
-          
+
           # Generate image name
           image_name="${REGISTRY}/${IMAGE_NAMESPACE}/${APP}"
-          
+
           # Generate test tags for PR
           short_sha=$(echo "${{ github.sha }}" | cut -c1-7)
           tags="${image_name}:${VERSION}-${PLATFORM}-pr-${{ github.event.number }}-${short_sha}"
-          
-          echo "image_name=${image_name}" >> $GITHUB_OUTPUT
-          echo "tags=${tags}" >> $GITHUB_OUTPUT
-          
+
+          echo "image_name=${image_name}" >> "$GITHUB_OUTPUT"
+          echo "tags=${tags}" >> "$GITHUB_OUTPUT"
+
           # Generate labels
           labels=$(cat <<EOF
           org.opencontainers.image.title=${APP}
@@ -200,11 +200,11 @@ jobs:
           org.opencontainers.image.base.name=docker.io/bitnami/minideb:bookworm
           EOF
           )
-          
+
           # Convert labels to single line for output
           labels_single_line=$(echo "$labels" | tr '\n' ',' | sed 's/,$//')
-          echo "labels=${labels_single_line}" >> $GITHUB_OUTPUT
-          
+          echo "labels=${labels_single_line}" >> "$GITHUB_OUTPUT"
+
           echo "Generated metadata for ${CONTAINER}:"
           echo "  Image: ${image_name}"
           echo "  Tags: ${tags}"
@@ -215,7 +215,7 @@ jobs:
         with:
           context: ${{ matrix.container }}
           file: ${{ matrix.container }}/Dockerfile
-          platforms: linux/amd64  # Only build for amd64 in PR checks for speed
+          platforms: linux/amd64 # Only build for amd64 in PR checks for speed
           push: false
           load: true
           tags: ${{ steps.build-metadata.outputs.tags }}
@@ -226,13 +226,13 @@ jobs:
       - name: Test container startup
         run: |
           set -euo pipefail
-          
+
           image_tag="${{ steps.build-metadata.outputs.tags }}"
           echo "Testing container startup for: $image_tag"
-          
+
           # Run basic startup test
           container_id=$(docker run -d "$image_tag")
-          
+
           # Wait for container to start and check if it's running
           sleep 5
           if docker ps --filter "id=$container_id" --format "table {{.ID}}\t{{.Status}}" | grep -q "Up"; then
@@ -243,7 +243,7 @@ jobs:
             docker logs "$container_id" || true
             exit 1
           fi
-          
+
           # Cleanup
           docker stop "$container_id" || true
           docker rm "$container_id" || true
@@ -252,15 +252,15 @@ jobs:
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # master
         with:
           image-ref: ${{ steps.build-metadata.outputs.tags }}
-          format: 'sarif'
-          output: 'trivy-results.sarif'
+          format: "sarif"
+          output: "trivy-results.sarif"
 
       - name: Upload Trivy scan results
         uses: github/codeql-action/upload-sarif@2d92b76c45b91eb80fc44c74ce3fce0ee94e8f9d # v3.30.0
         if: always()
         with:
-          sarif_file: 'trivy-results.sarif'
-          category: 'trivy'
+          sarif_file: "trivy-results.sarif"
+          category: "trivy"
 
   # Summary job
   pr-check-summary:

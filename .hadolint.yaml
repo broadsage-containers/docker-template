@@ -2,8 +2,8 @@
 
 # Hadolint configuration for Dockerfile linting
 ignored:
-  - DL3008  # Allow apt-get install without specific versions in base images
-  - DL3009  # Allow keeping apt lists for debugging in development images
+  - DL3008 # Allow apt-get install without specific versions in base images
+  - DL3009 # Allow keeping apt lists for debugging in development images
 
 trustedRegistries:
   - docker.io

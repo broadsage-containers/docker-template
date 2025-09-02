@@ -1,0 +1,42 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage <opensource@broadsage.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+publiccodeYmlVersion: "0.4"
+categories:
+  - collaboration
+description:
+  en:
+    features:
+      - Template
+    longDescription: |
+      This is a template project containing 'Community Health  Files' and relevant
+      checklists. Its intention is to be a practical starter when releasing a
+      project as  Open Source. It was created in a general way to be usable for
+      anyone, and proposes  well known conventions and de-facto standards when
+      possible. However, It is slightly opinionated, so adjust it to suit your
+      specific  needs. Or even:
+
+
+      **You **_**are supposed**_** to adjust the contents and suggestions to
+      suit your project needs.          **
+    shortDescription: "https://github.com/broadsage/opensource-template"
+developmentStatus: development
+legal:
+  license: Apache-2.0
+localisation:
+  availableLanguages:
+    - en
+  localisationReady: true
+maintenance:
+  contacts:
+    - name: opensource@broadsage.com
+  type: internal
+name: open source project template
+platforms:
+  - web
+releaseDate: "2025-06-27"
+softwareType: standalone/other
+softwareVersion: dev
+url: "https://github.com/broadsage/opensource-template.git"
+roadmap: "https://github.com/broadsage/opensource-template#roadmap"

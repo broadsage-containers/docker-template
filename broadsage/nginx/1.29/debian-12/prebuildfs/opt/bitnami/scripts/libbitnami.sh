@@ -25,11 +25,11 @@ BOLD='\033[1m'
 #   None
 #########################
 print_welcome_page() {
-    if [[ -z "${DISABLE_WELCOME_MESSAGE:-}" ]]; then
-        if [[ -n "$BITNAMI_APP_NAME" ]]; then
-            print_image_welcome_page
-        fi
+  if [[ -z "${DISABLE_WELCOME_MESSAGE:-}" ]]; then
+    if [[ -n "$BITNAMI_APP_NAME" ]]; then
+      print_image_welcome_page
     fi
+  fi
 }
 
 ########################
@@ -42,12 +42,11 @@ print_welcome_page() {
 #   None
 #########################
 print_image_welcome_page() {
-    local github_url="https://github.com/bitnami/containers"
+  local github_url="https://github.com/bitnami/containers"
 
-    info ""
-    info "${BOLD}Welcome to the Bitnami ${BITNAMI_APP_NAME} container${RESET}"
-    info "Subscribe to project updates by watching ${BOLD}${github_url}${RESET}"
-    info "${YELLOW}NOTICE: Starting August 28th, 2025, only a limited subset of images/charts will remain available for free. Backup will be available for some time at the 'Bitnami Legacy' repository. More info at https://github.com/bitnami/containers/issues/83267${RESET}"
-    info ""
+  info ""
+  info "${BOLD}Welcome to the Bitnami ${BITNAMI_APP_NAME} container${RESET}"
+  info "Subscribe to project updates by watching ${BOLD}${github_url}${RESET}"
+  info "${YELLOW}NOTICE: Starting August 28th, 2025, only a limited subset of images/charts will remain available for free. Backup will be available for some time at the 'Bitnami Legacy' repository. More info at https://github.com/bitnami/containers/issues/83267${RESET}"
+  info ""
 }
-

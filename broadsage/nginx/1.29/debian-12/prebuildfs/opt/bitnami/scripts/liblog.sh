@@ -22,13 +22,13 @@ CYAN='\033[38;5;6m'
 #   None
 #########################
 stderr_print() {
-    # 'is_boolean_yes' is defined in libvalidations.sh, but depends on this file so we cannot source it
-    local bool="${BITNAMI_QUIET:-false}"
-    # comparison is performed without regard to the case of alphabetic characters
-    shopt -s nocasematch
-    if ! [[ "$bool" = 1 || "$bool" =~ ^(yes|true)$ ]]; then
-        printf "%b\\n" "${*}" >&2
-    fi
+  # 'is_boolean_yes' is defined in libvalidations.sh, but depends on this file so we cannot source it
+  local bool="${BITNAMI_QUIET:-false}"
+  # comparison is performed without regard to the case of alphabetic characters
+  shopt -s nocasematch
+  if ! [[ "$bool" = 1 || "$bool" =~ ^(yes|true)$ ]]; then
+    printf "%b\\n" "${*}" >&2
+  fi
 }
 
 ########################
@@ -39,14 +39,14 @@ stderr_print() {
 #   None
 #########################
 log() {
-    local color_bool="${BITNAMI_COLOR:-true}"
-    # comparison is performed without regard to the case of alphabetic characters
-    shopt -s nocasematch
-    if [[ "$color_bool" = 1 || "$color_bool" =~ ^(yes|true)$ ]]; then
-        stderr_print "${CYAN}${MODULE:-} ${MAGENTA}$(date "+%T.%2N ")${RESET}${*}"
-    else
-        stderr_print "${MODULE:-} $(date "+%T.%2N ")${*}"
-    fi
+  local color_bool="${BITNAMI_COLOR:-true}"
+  # comparison is performed without regard to the case of alphabetic characters
+  shopt -s nocasematch
+  if [[ "$color_bool" = 1 || "$color_bool" =~ ^(yes|true)$ ]]; then
+    stderr_print "${CYAN}${MODULE:-} ${MAGENTA}$(date "+%T.%2N ")${RESET}${*}"
+  else
+    stderr_print "${MODULE:-} $(date "+%T.%2N ")${*}"
+  fi
 }
 ########################
 # Log an 'info' message
@@ -56,14 +56,14 @@ log() {
 #   None
 #########################
 info() {
-    local msg_color=""
-    local color_bool="${BITNAMI_COLOR:-true}"
-    # comparison is performed without regard to the case of alphabetic characters
-    shopt -s nocasematch
-    if [[ "$color_bool" = 1 || "$color_bool" =~ ^(yes|true)$ ]];then
-        msg_color="$GREEN"
-    fi
-    log "${msg_color}INFO ${RESET} ==> ${*}"
+  local msg_color=""
+  local color_bool="${BITNAMI_COLOR:-true}"
+  # comparison is performed without regard to the case of alphabetic characters
+  shopt -s nocasematch
+  if [[ "$color_bool" = 1 || "$color_bool" =~ ^(yes|true)$ ]]; then
+    msg_color="$GREEN"
+  fi
+  log "${msg_color}INFO ${RESET} ==> ${*}"
 }
 ########################
 # Log message
@@ -73,14 +73,14 @@ info() {
 #   None
 #########################
 warn() {
-    local msg_color=""
-    local color_bool="${BITNAMI_COLOR:-true}"
-    # comparison is performed without regard to the case of alphabetic characters
-    shopt -s nocasematch
-    if [[ "$color_bool" = 1 || "$color_bool" =~ ^(yes|true)$ ]];then
-        msg_color="$YELLOW"
-    fi
-    log "${msg_color}WARN ${RESET} ==> ${*}"
+  local msg_color=""
+  local color_bool="${BITNAMI_COLOR:-true}"
+  # comparison is performed without regard to the case of alphabetic characters
+  shopt -s nocasematch
+  if [[ "$color_bool" = 1 || "$color_bool" =~ ^(yes|true)$ ]]; then
+    msg_color="$YELLOW"
+  fi
+  log "${msg_color}WARN ${RESET} ==> ${*}"
 }
 ########################
 # Log an 'error' message
@@ -90,14 +90,14 @@ warn() {
 #   None
 #########################
 error() {
-    local msg_color=""
-    local color_bool="${BITNAMI_COLOR:-true}"
-    # comparison is performed without regard to the case of alphabetic characters
-    shopt -s nocasematch
-    if [[ "$color_bool" = 1 || "$color_bool" =~ ^(yes|true)$ ]];then
-        msg_color="$RED"
-    fi
-    log "${msg_color}ERROR${RESET} ==> ${*}"
+  local msg_color=""
+  local color_bool="${BITNAMI_COLOR:-true}"
+  # comparison is performed without regard to the case of alphabetic characters
+  shopt -s nocasematch
+  if [[ "$color_bool" = 1 || "$color_bool" =~ ^(yes|true)$ ]]; then
+    msg_color="$RED"
+  fi
+  log "${msg_color}ERROR${RESET} ==> ${*}"
 }
 ########################
 # Log a 'debug' message
@@ -109,17 +109,17 @@ error() {
 #   None
 #########################
 debug() {
-    local msg_color=""
-    local color_bool="${BITNAMI_COLOR:-true}"
-    # comparison is performed without regard to the case of alphabetic characters
-    shopt -s nocasematch
-    if [[ "$color_bool" = 1 || "$color_bool" =~ ^(yes|true)$ ]] ;then
-        msg_color="$MAGENTA"
-    fi
-    local debug_bool="${BITNAMI_DEBUG:-false}"
-    if [[ "$debug_bool" = 1 || "$debug_bool" =~ ^(yes|true)$ ]]; then
-        log "${msg_color}DEBUG${RESET} ==> ${*}"
-    fi
+  local msg_color=""
+  local color_bool="${BITNAMI_COLOR:-true}"
+  # comparison is performed without regard to the case of alphabetic characters
+  shopt -s nocasematch
+  if [[ "$color_bool" = 1 || "$color_bool" =~ ^(yes|true)$ ]]; then
+    msg_color="$MAGENTA"
+  fi
+  local debug_bool="${BITNAMI_DEBUG:-false}"
+  if [[ "$debug_bool" = 1 || "$debug_bool" =~ ^(yes|true)$ ]]; then
+    log "${msg_color}DEBUG${RESET} ==> ${*}"
+  fi
 }
 
 ########################
@@ -132,15 +132,15 @@ debug() {
 #   None
 #########################
 indent() {
-    local string="${1:-}"
-    local num="${2:?missing num}"
-    local char="${3:-" "}"
-    # Build the indentation unit string
-    local indent_unit=""
-    for ((i = 0; i < num; i++)); do
-        indent_unit="${indent_unit}${char}"
-    done
-    # shellcheck disable=SC2001
-    # Complex regex, see https://github.com/koalaman/shellcheck/wiki/SC2001#exceptions
-    echo "$string" | sed "s/^/${indent_unit}/"
+  local string="${1:-}"
+  local num="${2:?missing num}"
+  local char="${3:-" "}"
+  # Build the indentation unit string
+  local indent_unit=""
+  for ((i = 0; i < num; i++)); do
+    indent_unit="${indent_unit}${char}"
+  done
+  # shellcheck disable=SC2001
+  # Complex regex, see https://github.com/koalaman/shellcheck/wiki/SC2001#exceptions
+  echo "$string" | sed "s/^/${indent_unit}/"
 }
