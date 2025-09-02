@@ -1,42 +1,140 @@
-name: 🐞 Bug
-description: Create a report to help us improve
-labels: ["tech-issues"]
+#
+# SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage <opensource@broadsage.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+name: 🐛 Bug Report
+description: File a bug report to help us improve
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+assignees: []
+
 body:
   - type: markdown
     attributes:
       value: |
-        Thank you for reporting an issue. Before you open the bug report, please review the README file present in the root of this repository.
+        Thanks for taking the time to fill out this bug report! 🙏
 
-        Please fill in as much of the following form as you're able.
+        Before submitting, please:
+        - Check if a similar issue already exists
+        - Ensure you're using a supported version
+        - Review our [troubleshooting guide](../docs/troubleshooting.md) if available
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Prerequisites
+      description: By submitting this issue, you agree to follow our Code of Conduct
+      options:
+        - label: I have read and agree to the [Code of Conduct](../CODE_OF_CONDUCT.md)
+          required: true
+        - label: I have searched for existing issues that may be the same as or related to mine
+          required: true
+
   - type: input
+    id: version
     attributes:
-      label: Name and Version
-      description: Name and version of the affected container image
-      placeholder: bitnami/wordpress:1.2.3
+      label: Version
+      description: What version of the project are you using?
+      placeholder: "e.g., v1.2.3, commit hash, or 'latest'"
     validations:
       required: true
-  - type: textarea
+
+  - type: dropdown
+    id: environment
     attributes:
-      label: What steps will reproduce the bug?
-      description: Enter details about your bug.
+      label: Environment
+      description: What environment are you running in?
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Docker
+        - Cloud (specify in description)
+        - Other (specify in description)
+    validations:
+      required: true
+
+  - type: textarea
+    id: bug-description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is
+      placeholder: "Describe what happened and what you expected to happen"
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction-steps
+    attributes:
+      label: Steps to Reproduce
+      description: Steps to reproduce the behavior
       placeholder: |
-        1. In this environment...
-        2. With this config...
-        3. Run '...'
-        4. See error...
+        1. Go to '...'
+        2. Click on '...'
+        3. Scroll down to '...'
+        4. See error
     validations:
       required: true
+
   - type: textarea
+    id: expected-behavior
     attributes:
-      label: What is the expected behavior?
-      description: If possible, please provide textual output instead of screenshots.
-  - type: textarea
-    attributes:
-      label: What do you see instead?
-      description: If possible, please provide textual output instead of screenshots.
+      label: Expected Behavior
+      description: A clear and concise description of what you expected to happen
+      placeholder: "What should have happened instead?"
     validations:
       required: true
+
   - type: textarea
+    id: actual-behavior
     attributes:
-      label: Additional information
-      description: Tell us anything else you think we should know.
+      label: Actual Behavior
+      description: A clear and concise description of what actually happened
+      placeholder: "What actually happened?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs/Error Messages
+      description: If applicable, add logs or error messages to help explain your problem
+      placeholder: "Paste any relevant logs, error messages, or stack traces here"
+      render: shell
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: If applicable, add screenshots to help explain your problem
+      placeholder: "Drag and drop images here or paste URLs"
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Add any other context about the problem here
+      placeholder: "Any additional information that might be helpful"
+
+  - type: textarea
+    id: configuration
+    attributes:
+      label: Configuration
+      description: If applicable, share relevant configuration files or settings
+      placeholder: "Share configuration files, command-line arguments, or environment variables"
+      render: yaml
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How critical is this bug for your use case?
+      options:
+        - Low - Minor issue, workaround available
+        - Medium - Moderate impact, affects workflow
+        - High - Major impact, blocks important functionality
+        - Critical - System unusable, security issue, data loss
+    validations:
+      required: true
