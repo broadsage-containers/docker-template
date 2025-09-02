@@ -1,0 +1,301 @@
+version: '3'
+
+# Task configuration
+interval: 100ms
+silent: false
+
+# Global variables
+vars:
+  REGISTRY: '{{.REGISTRY | default "ghcr.io"}}'
+  NAMESPACE: '{{.NAMESPACE | default "broadsage"}}'
+  PLATFORM: '{{.PLATFORM | default "linux/amd64,linux/arm64"}}'
+  BUILD_ARGS: '--progress=plain --pull'
+
+# Include external task files
+includes:
+  containers:
+    taskfile: ./tasks/containers.yml
+    optional: true
+
+tasks:
+  # Default task
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list-all
+
+  # Setup development environment
+  setup:
+    desc: Setup development environment
+    cmds:
+      - echo "🔧 Setting up development environment..."
+      - task: install-tools
+      - task: validate-env
+      - echo "✅ Environment ready!"
+
+  install-tools:
+    desc: Install required tools
+    internal: true
+    cmds:
+      - |
+        if ! command -v docker &> /dev/null; then
+          echo "❌ Docker is required but not installed"
+          exit 1
+        fi
+      - |
+        if ! command -v hadolint &> /dev/null; then
+          echo "📦 Installing hadolint..."
+          brew install hadolint
+        fi
+      - |
+        if ! command -v trivy &> /dev/null; then
+          echo "📦 Installing trivy..."
+          brew install trivy
+        fi
+
+  validate-env:
+    desc: Validate environment
+    internal: true
+    cmds:
+      - docker --version
+      - hadolint --version
+      - trivy --version
+
+  # Build tasks
+  build:
+    desc: Build container(s)
+    summary: |
+      Build containers with multi-architecture support
+      
+      Usage:
+        task build CONTAINER=nginx
+        task build # builds all containers
+    vars:
+      CONTAINER: '{{.CONTAINER | default ""}}'
+    cmds:
+      - |
+        if [ -n "{{.CONTAINER}}" ]; then
+          echo "🏗️ Building container: {{.CONTAINER}}"
+          task: build-single
+        else
+          echo "🏗️ Building all containers"
+          task: build-all
+        fi
+
+  build-single:
+    desc: Build a single container
+    internal: true
+    vars:
+      DOCKERFILE_PATH: './broadsage/{{.CONTAINER}}/*/debian-*/Dockerfile'
+      BUILD_CONTEXT: './broadsage/{{.CONTAINER}}/*/debian-*/'
+      IMAGE_TAG: '{{.REGISTRY}}/{{.NAMESPACE}}/{{.CONTAINER}}:latest'
+    cmds:
+      - |
+        DOCKERFILE=$(find broadsage/{{.CONTAINER}} -name "Dockerfile" | head -1)
+        BUILD_DIR=$(dirname "$DOCKERFILE")
+        
+        if [ -z "$DOCKERFILE" ]; then
+          echo "❌ No Dockerfile found for {{.CONTAINER}}"
+          exit 1
+        fi
+        
+        echo "📂 Build context: $BUILD_DIR"
+        docker buildx build \
+          --platform {{.PLATFORM}} \
+          {{.BUILD_ARGS}} \
+          -t {{.IMAGE_TAG}} \
+          "$BUILD_DIR"
+
+  build-all:
+    desc: Build all containers
+    internal: true
+    cmds:
+      - |
+        for container in $(find broadsage -mindepth 1 -maxdepth 1 -type d -exec basename {} \;); do
+          echo "🏗️ Building $container..."
+          CONTAINER=$container task build-single
+        done
+
+  # Test tasks
+  test:
+    desc: Test container(s)
+    summary: |
+      Run comprehensive tests on containers
+      
+      Usage:
+        task test CONTAINER=nginx
+        task test # tests all containers
+    vars:
+      CONTAINER: '{{.CONTAINER | default ""}}'
+    cmds:
+      - |
+        if [ -n "{{.CONTAINER}}" ]; then
+          echo "🧪 Testing container: {{.CONTAINER}}"
+          task: test-single
+        else
+          echo "🧪 Testing all containers"
+          task: test-all
+        fi
+
+  test-single:
+    desc: Test a single container
+    internal: true
+    vars:
+      IMAGE_TAG: '{{.REGISTRY}}/{{.NAMESPACE}}/{{.CONTAINER}}:latest'
+    cmds:
+      - echo "🔍 Running functional tests for {{.CONTAINER}}"
+      - |
+        case "{{.CONTAINER}}" in
+          nginx)
+            docker run --rm {{.IMAGE_TAG}} nginx -t
+            ;;
+          *)
+            echo "ℹ️ No specific tests defined for {{.CONTAINER}}"
+            docker run --rm {{.IMAGE_TAG}} sh -c "echo 'Container smoke test passed'"
+            ;;
+        esac
+
+  test-all:
+    desc: Test all containers
+    internal: true
+    cmds:
+      - |
+        for container in $(find broadsage -mindepth 1 -maxdepth 1 -type d -exec basename {} \;); do
+          echo "🧪 Testing $container..."
+          CONTAINER=$container task test-single
+        done
+
+  # Security tasks
+  security:
+    desc: Run security scans
+    vars:
+      CONTAINER: '{{.CONTAINER | default ""}}'
+    cmds:
+      - |
+        if [ -n "{{.CONTAINER}}" ]; then
+          echo "🔒 Security scanning: {{.CONTAINER}}"
+          task: security-single
+        else
+          echo "🔒 Security scanning all containers"
+          task: security-all
+        fi
+
+  security-single:
+    desc: Security scan a single container
+    internal: true
+    vars:
+      IMAGE_TAG: '{{.REGISTRY}}/{{.NAMESPACE}}/{{.CONTAINER}}:latest'
+    cmds:
+      - trivy image --severity HIGH,CRITICAL {{.IMAGE_TAG}}
+
+  security-all:
+    desc: Security scan all containers
+    internal: true
+    cmds:
+      - |
+        for container in $(find broadsage -mindepth 1 -maxdepth 1 -type d -exec basename {} \;); do
+          echo "🔒 Scanning $container..."
+          CONTAINER=$container task security-single
+        done
+
+  # Quality tasks
+  lint:
+    desc: Lint Dockerfiles
+    cmds:
+      - echo "📝 Linting Dockerfiles..."
+      - find broadsage -name "Dockerfile" -exec hadolint {} \;
+
+  # Registry tasks
+  push:
+    desc: Push container(s) to registry
+    vars:
+      CONTAINER: '{{.CONTAINER | default ""}}'
+    cmds:
+      - |
+        if [ -n "{{.CONTAINER}}" ]; then
+          echo "📤 Pushing container: {{.CONTAINER}}"
+          task: push-single
+        else
+          echo "📤 Pushing all containers"
+          task: push-all
+        fi
+
+  push-single:
+    desc: Push a single container
+    internal: true
+    vars:
+      IMAGE_TAG: '{{.REGISTRY}}/{{.NAMESPACE}}/{{.CONTAINER}}:latest'
+    cmds:
+      - docker push {{.IMAGE_TAG}}
+
+  push-all:
+    desc: Push all containers
+    internal: true
+    cmds:
+      - |
+        for container in $(find broadsage -mindepth 1 -maxdepth 1 -type d -exec basename {} \;); do
+          echo "📤 Pushing $container..."
+          CONTAINER=$container task push-single
+        done
+
+  # Cleanup tasks
+  clean:
+    desc: Clean up containers and images
+    cmds:
+      - echo "🧹 Cleaning up..."
+      - docker system prune -f
+      - docker builder prune -f
+      - echo "✅ Cleanup completed"
+
+  # Workflow tasks
+  dev:
+    desc: Development workflow (build + test)
+    cmds:
+      - task: build
+      - task: test
+      - echo "✅ Development workflow completed"
+
+  ci:
+    desc: CI workflow (lint + build + test + security)
+    cmds:
+      - task: lint
+      - task: build
+      - task: test
+      - task: security
+      - echo "✅ CI pipeline completed"
+
+  # Utility tasks
+  status:
+    desc: Show container status
+    cmds:
+      - echo "📊 Container Images:"
+      - docker images | grep {{.NAMESPACE}} || echo "No images found"
+      - echo ""
+      - echo "📊 Running Containers:"
+      - docker ps -a | grep {{.NAMESPACE}} || echo "No containers running"
+
+  list-containers:
+    desc: List available containers
+    cmds:
+      - echo "📦 Available containers:"
+      - find broadsage -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort
+
+  # GitHub Actions validation
+  validate-workflows:
+    desc: Validate GitHub Actions workflows
+    cmds:
+      - echo "🔍 Validating GitHub Actions workflows..."
+      - |
+        if command -v actionlint &> /dev/null; then
+          actionlint .github/workflows/*.yml
+        else
+          echo "⚠️ actionlint not found. Install with: brew install actionlint"
+          echo "📝 Checking YAML syntax..."
+          for workflow in .github/workflows/*.yml; do
+            if command -v yamllint &> /dev/null; then
+              yamllint "$workflow"
+            else
+              echo "ℹ️ Install yamllint for better validation: brew install yamllint"
+            fi
+          done
+        fi
