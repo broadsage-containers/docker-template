@@ -7,15 +7,10 @@
 
 name: "Container Security CodeQL Configuration"
 
-# Use default queries plus security-focused additions
+# Use default queries with enhanced security focus
 disable-default-queries: false
 
-# Enhanced query suites for container security
-queries:
-  - uses: security-extended
-  - uses: security-and-quality
-  - name: "Container Security Suite"
-    uses: ./.github/codeql/custom-container-security.qls
+# Note: Query suites are specified in the workflow file for better control
 
 # Container-focused path configuration
 paths-ignore:
