@@ -1,4 +1,4 @@
-name: '[PR] Pull Request Check'
+name: '[PR] Pull Request Validation'
 
 on:
   pull_request:

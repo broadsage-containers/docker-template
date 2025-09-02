@@ -2,7 +2,7 @@ name: '[CI/CD] Publish Approved PR'
 
 on:
   workflow_run:
-    workflows: ["[PR] Pull Request Check"]
+    workflows: ["[PR] Pull Request Validation"]
     types:
       - completed
     branches: [main]
