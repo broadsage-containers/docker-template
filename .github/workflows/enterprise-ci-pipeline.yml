@@ -318,7 +318,7 @@ jobs:
           tags: test-image:latest
           cache-from: type=gha,scope=build-${{ matrix.app }}-${{ matrix.version }}-${{ matrix.platform }}
       - name: Security scan with Trivy
-        uses: aquasecurity/trivy-action@b2933f565dbc598b29947660e66259e3c7bc8561 # 0.20.0
+        uses: aquasecurity/trivy-action@f9424c10c36e288d5fa79bd3dfd1aeb2d6eae808 # 0.33.0
         with:
           image-ref: test-image:latest
           format: 'sarif'

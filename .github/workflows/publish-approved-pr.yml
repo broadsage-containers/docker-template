@@ -316,7 +316,7 @@ jobs:
           cosign sign --yes ${{ steps.build-metadata.outputs.image_name }}@${{ steps.build.outputs.digest }}
 
       - name: Run security scan with Trivy
-        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # master
+        uses: aquasecurity/trivy-action@f9424c10c36e288d5fa79bd3dfd1aeb2d6eae808 # master
         with:
           image-ref: ${{ steps.build-metadata.outputs.image_name }}@${{ steps.build.outputs.digest }}
           format: 'sarif'
