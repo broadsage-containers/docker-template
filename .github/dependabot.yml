@@ -10,6 +10,10 @@ updates:
       interval: "weekly"
     # Allow Dependabot to open PRs for GitHub Actions updates
     open-pull-requests-limit: 10
+    # Only update patch and minor versions to reduce security risk
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: docker
     directory: /broadsage/nginx/1.29/debian-12
