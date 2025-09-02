@@ -406,7 +406,7 @@ jobs:
 
       - name: Install Cosign for additional signing
         if: steps.push.outcome == 'success'
-        uses: sigstore/cosign-installer@e1523de7571e31dbe865fd2e80c5c7c23ae71eb4 # v3.4.0
+        uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
 
       - name: Sign container image with Cosign
         if: steps.push.outcome == 'success'
