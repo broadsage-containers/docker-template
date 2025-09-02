@@ -8,3 +8,5 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    # Allow Dependabot to open PRs for GitHub Actions updates
+    open-pull-requests-limit: 10
