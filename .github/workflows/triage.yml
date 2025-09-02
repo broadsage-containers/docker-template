@@ -1,0 +1,376 @@
+# Copyright Broadcom, Inc. All Rights Reserved.
+# SPDX-License-Identifier: APACHE-2.0
+
+name: '[Support] Issue and PR Triage'
+
+on:
+  issues:
+    types: [opened, edited, labeled, unlabeled]
+  pull_request:
+    types: [opened, edited, labeled, unlabeled, ready_for_review]
+  schedule:
+    # Run triage check every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'Specific issue number to triage (optional)'
+        required: false
+        type: string
+
+permissions:
+  issues: write
+  pull-requests: write
+  contents: read
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    name: Triage issues and pull requests
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+
+      - name: Validate issue template compliance
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        if: github.event_name == 'issues' && github.event.action == 'opened'
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const body = issue.body || '';
+            const title = issue.title;
+            const labels = [];
+            
+            // Check if issue follows template structure
+            const hasEnvironmentSection = body.includes('Environment') || body.includes('environment');
+            const hasStepsToReproduce = body.includes('Steps') || body.includes('reproduce');
+            const hasExpectedBehavior = body.includes('Expected') || body.includes('expected');
+            
+            // Validate bug reports
+            if (title.toLowerCase().includes('bug') || body.toLowerCase().includes('bug')) {
+              if (!hasEnvironmentSection || !hasStepsToReproduce || !hasExpectedBehavior) {
+                labels.push('needs-info');
+                
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  body: `👋 Thanks for reporting this issue! 
+
+                  It looks like this might be a bug report, but some important information is missing. To help us investigate efficiently, please provide:
+
+                  **Missing Information:**
+                  ${!hasEnvironmentSection ? '- 🖥️ **Environment details** (OS, Docker version, architecture)' : ''}
+                  ${!hasStepsToReproduce ? '- 📝 **Clear steps to reproduce** the issue' : ''}
+                  ${!hasExpectedBehavior ? '- ✅ **Expected behavior** description' : ''}
+
+                  You can edit your issue description to add this information. Once provided, a maintainer will review your issue promptly.
+
+                  **Tip:** Using our [issue templates](.github/ISSUE_TEMPLATE) helps ensure all necessary information is included! 📝`
+                });
+              }
+            }
+            
+            // Check for incomplete issues
+            if (body.length < 50 || title.length < 10) {
+              labels.push('needs-info');
+              
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: `📝 **More information needed**
+
+                Your issue appears to be quite brief. To help us assist you effectively, please provide:
+
+                - 📄 A clear and detailed description of the issue
+                - 🎯 What you're trying to achieve
+                - 🔍 What you've already tried
+                - 📱 Your environment details
+
+                The more context you provide, the better we can help! 🙌`
+              });
+            }
+            
+            // Apply labels if any
+            if (labels.length > 0) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                labels: labels
+              });
+            }
+
+      - name: Triage pull requests
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        if: github.event_name == 'pull_request'
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const body = pr.body || '';
+            const title = pr.title;
+            const labels = [];
+            const comments = [];
+            
+            // Check PR description completeness
+            const hasDescription = body.length > 50;
+            const hasRelatedIssue = body.includes('#') || body.includes('fixes') || body.includes('closes');
+            const hasTestingInfo = body.includes('test') || body.includes('Test');
+            const hasChangeType = body.includes('- [x]') || body.includes('- [X]');
+            
+            if (!hasDescription) {
+              labels.push('needs-info');
+              comments.push(`📝 **PR Description Needed**
+              
+              Please provide a detailed description of your changes. A good PR description should include:
+              - 🎯 What problem this solves
+              - 🔧 What changes were made
+              - 🧪 How it was tested
+              - 📋 Any breaking changes or special considerations`);
+            }
+            
+            if (!hasRelatedIssue && !pr.title.toLowerCase().includes('chore')) {
+              comments.push(`🔗 **Link to Issue**
+              
+              Please link this PR to a related issue using keywords like:
+              - \`Fixes #123\`
+              - \`Closes #123\`
+              - \`Resolves #123\`
+              
+              If no issue exists, consider creating one first to discuss the changes! 💭`);
+            }
+            
+            // Check for large PRs
+            const { data: files } = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number
+            });
+            
+            const totalChanges = files.reduce((sum, file) => sum + file.additions + file.deletions, 0);
+            
+            if (totalChanges > 500) {
+              labels.push('large-pr');
+              comments.push(`📏 **Large PR Detected**
+              
+              This PR has ${totalChanges} lines of changes. Large PRs can be harder to review effectively.
+              
+              Consider:
+              - 🔪 Breaking it into smaller, focused PRs
+              - 📝 Adding extra documentation for complex changes
+              - 🧪 Ensuring comprehensive testing
+              
+              If this size is necessary, please explain why in the PR description. 🤔`);
+            }
+            
+            // Check for missing tests (if not docs/config only)
+            const hasCodeChanges = files.some(file => 
+              file.filename.match(/\.(js|ts|py|go|java|cpp|c|rs|php)$/));
+            const hasTestChanges = files.some(file => 
+              file.filename.includes('test') || file.filename.includes('spec'));
+            
+            if (hasCodeChanges && !hasTestChanges && !pr.title.toLowerCase().includes('docs')) {
+              labels.push('needs-tests');
+              comments.push(`🧪 **Tests Needed**
+              
+              This PR modifies code but doesn't appear to include tests. Please consider adding:
+              - ✅ Unit tests for new functionality
+              - 🔍 Integration tests if applicable
+              - 📝 Update existing tests if behavior changed
+              
+              If tests aren't needed, please explain why in the PR description. 🤓`);
+            }
+            
+            // Apply labels
+            if (labels.length > 0) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                labels: labels
+              });
+            }
+            
+            // Post combined comment if there are suggestions
+            if (comments.length > 0) {
+              const combinedComment = `👋 **Automated PR Triage**
+
+              ${comments.join('\n\n---\n\n')}
+
+              ---
+              
+              💡 **Tips for faster review:**
+              - Use our [PR template](.github/PULL_REQUEST_TEMPLATE.md)
+              - Keep PRs focused and small when possible
+              - Include tests and documentation updates
+              - Link to related issues
+              
+              Thanks for contributing! 🙏`;
+              
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                body: combinedComment
+              });
+            }
+
+      - name: Prioritize critical issues
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        if: github.event_name == 'issues'
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const title = issue.title.toLowerCase();
+            const body = (issue.body || '').toLowerCase();
+            const labels = [];
+            
+            // Critical issue keywords
+            const criticalKeywords = [
+              'critical', 'urgent', 'production', 'outage', 'down', 'broken',
+              'security', 'vulnerability', 'exploit', 'cve', 'data loss'
+            ];
+            
+            const highPriorityKeywords = [
+              'regression', 'breaking', 'blocker', 'severe', 'major'
+            ];
+            
+            // Check for critical issues
+            if (criticalKeywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
+              labels.push('priority-critical');
+              
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: `🚨 **Critical Issue Detected**
+
+                This issue has been automatically flagged as critical priority based on its content.
+                
+                **Immediate Actions:**
+                - 🔔 Maintainers have been notified
+                - ⚡ This will be triaged with highest priority
+                - 📞 For urgent production issues, consider reaching out via our support channels
+                
+                **Next Steps:**
+                - A maintainer will review within 24 hours
+                - Please ensure all critical information is provided
+                - Monitor for updates and respond promptly to questions
+                
+                Thank you for the detailed report! 🙏`
+              });
+            } else if (highPriorityKeywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
+              labels.push('priority-high');
+            }
+            
+            // Apply priority labels
+            if (labels.length > 0) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                labels: labels
+              });
+            }
+
+      - name: Community health check
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        if: github.event_name == 'schedule'
+        with:
+          script: |
+            // Find issues that need maintainer attention
+            const { data: needsTriageIssues } = await github.rest.search.issuesAndPullRequests({
+              q: `repo:${context.repo.owner}/${context.repo.repo} is:open is:issue -label:triaged -label:wontfix -label:duplicate created:>=${new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}`,
+              sort: 'created',
+              order: 'desc',
+              per_page: 10
+            });
+            
+            // Find old issues without response
+            const { data: staleIssues } = await github.rest.search.issuesAndPullRequests({
+              q: `repo:${context.repo.owner}/${context.repo.repo} is:open is:issue comments:0 created:<${new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}`,
+              per_page: 5
+            });
+            
+            if (needsTriageIssues.total_count > 0 || staleIssues.total_count > 0) {
+              console.log(`📊 Triage Report:
+              - ${needsTriageIssues.total_count} recent issues need triage
+              - ${staleIssues.total_count} older issues have no responses
+              `);
+              
+              // Add triage-needed label to untriaged issues
+              for (const issue of needsTriageIssues.items) {
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  labels: ['triage-needed']
+                });
+              }
+            }
+
+      - name: Update triage metrics
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        if: github.event_name == 'schedule'
+        with:
+          script: |
+            // Generate triage statistics
+            const now = new Date();
+            const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            
+            const queries = {
+              'new_issues': `repo:${context.repo.owner}/${context.repo.repo} is:issue created:>=${oneWeekAgo.toISOString().split('T')[0]}`,
+              'new_prs': `repo:${context.repo.owner}/${context.repo.repo} is:pr created:>=${oneWeekAgo.toISOString().split('T')[0]}`,
+              'triaged_issues': `repo:${context.repo.owner}/${context.repo.repo} is:issue label:triaged created:>=${oneWeekAgo.toISOString().split('T')[0]}`,
+              'needs_triage': `repo:${context.repo.owner}/${context.repo.repo} is:open is:issue -label:triaged -label:wontfix`,
+              'critical_open': `repo:${context.repo.owner}/${context.repo.repo} is:open is:issue label:priority-critical`
+            };
+            
+            const stats = {};
+            for (const [key, query] of Object.entries(queries)) {
+              const { data } = await github.rest.search.issuesAndPullRequests({ q: query, per_page: 1 });
+              stats[key] = data.total_count;
+            }
+            
+            console.log(`📈 Weekly Triage Metrics:
+            📥 New Issues: ${stats.new_issues}
+            🔄 New PRs: ${stats.new_prs}  
+            ✅ Triaged: ${stats.triaged_issues}
+            ⏳ Needs Triage: ${stats.needs_triage}
+            🚨 Critical Open: ${stats.critical_open}
+            
+            📊 Triage Rate: ${stats.new_issues > 0 ? Math.round((stats.triaged_issues / stats.new_issues) * 100) : 0}%
+            `);
+            
+            // Create issue if triage backlog is high
+            if (stats.needs_triage > 20) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `🏥 Triage Backlog Alert: ${stats.needs_triage} issues need attention`,
+                body: `## Triage Backlog Alert
+
+                Our issue triage backlog has grown to **${stats.needs_triage} issues** that need maintainer attention.
+
+                ### Weekly Stats:
+                - 📥 New Issues: ${stats.new_issues}
+                - ✅ Triaged: ${stats.triaged_issues}
+                - ⏳ Pending Triage: ${stats.needs_triage}
+                - 🚨 Critical Issues: ${stats.critical_open}
+
+                ### Recommended Actions:
+                - [ ] Review [untriaged issues](https://github.com/${context.repo.owner}/${context.repo.repo}/issues?q=is%3Aopen+is%3Aissue+-label%3Atriaged+-label%3Awontfix)
+                - [ ] Add appropriate labels and priority
+                - [ ] Close duplicate or invalid issues
+                - [ ] Assign issues to milestones if applicable
+
+                This alert was automatically generated by our triage workflow.`,
+                labels: ['triage-needed', 'maintenance']
+              });
+            }
