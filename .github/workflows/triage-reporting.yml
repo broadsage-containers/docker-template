@@ -1,16 +1,16 @@
 # Copyright Broadcom, Inc. All Rights Reserved.
 # SPDX-License-Identifier: APACHE-2.0
 
-name: '[Support] Triage Metrics and Reporting'
+name: "[Support] Triage Metrics and Reporting"
 
 on:
   schedule:
     # Generate weekly reports every Monday at 9 AM UTC
-    - cron: '0 9 * * 1'
+    - cron: "0 9 * * 1"
   workflow_dispatch:
     inputs:
       report_type:
-        description: 'Type of report to generate'
+        description: "Type of report to generate"
         required: true
         type: choice
         options:
@@ -19,7 +19,7 @@ on:
           - custom
         default: weekly
       days_back:
-        description: 'Days to look back (for custom reports)'
+        description: "Days to look back (for custom reports)"
         required: false
         type: number
         default: 7
@@ -44,14 +44,14 @@ jobs:
           script: |
             const reportType = '${{ github.event.inputs.report_type || 'weekly' }}';
             const daysBack = parseInt('${{ github.event.inputs.days_back || '7' }}');
-            
+
             // Calculate date ranges
             const now = new Date();
             const startDate = new Date(now.getTime() - daysBack * 24 * 60 * 60 * 1000);
             const startDateStr = startDate.toISOString().split('T')[0];
-            
+
             console.log(`📊 Generating ${reportType} triage report for ${daysBack} days back from ${startDateStr}`);
-            
+
             // Define all queries for metrics
             const queries = {
               // New activity
@@ -87,7 +87,7 @@ jobs:
               no_response_3d: `repo:${context.repo.owner}/${context.repo.repo} is:open is:issue comments:0 created:<${new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}`,
               no_response_7d: `repo:${context.repo.owner}/${context.repo.repo} is:open is:issue comments:0 created:<${new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}`
             };
-            
+
             // Collect all metrics
             const metrics = {};
             for (const [key, query] of Object.entries(queries)) {
@@ -102,7 +102,7 @@ jobs:
                 metrics[key] = 0;
               }
             }
-            
+
             // Calculate derived metrics
             const triageRate = metrics.new_issues > 0 ? 
               Math.round((metrics.triaged_issues / metrics.new_issues) * 100) : 0;
@@ -110,75 +110,75 @@ jobs:
               Math.round(((metrics.new_issues - metrics.no_response_3d) / metrics.new_issues) * 100) : 100;
             const resolutionRate = metrics.new_issues > 0 ? 
               Math.round((metrics.closed_issues / metrics.new_issues) * 100) : 0;
-            
+
             // Generate comprehensive report
             const report = `# 📊 Triage Report - ${reportType.charAt(0).toUpperCase() + reportType.slice(1)}
-            
+
             **Report Period:** ${startDateStr} to ${now.toISOString().split('T')[0]} (${daysBack} days)
             **Generated:** ${now.toISOString()}
-            
+
             ## 🎯 Key Metrics
-            
+
             | Metric | Value | Status |
             |--------|-------|--------|
             | **Triage Rate** | ${triageRate}% | ${triageRate >= 80 ? '✅ Good' : triageRate >= 60 ? '⚠️ Needs Attention' : '❌ Poor'} |
             | **Response Rate** | ${responseRate}% | ${responseRate >= 90 ? '✅ Excellent' : responseRate >= 75 ? '⚠️ Good' : '❌ Needs Improvement'} |
             | **Resolution Rate** | ${resolutionRate}% | ${resolutionRate >= 70 ? '✅ Good' : resolutionRate >= 50 ? '⚠️ Fair' : '❌ Low'} |
-            
+
             ## 📈 Activity Summary
-            
+
             ### New Activity
             - 📥 **New Issues:** ${metrics.new_issues}
             - 🔄 **New PRs:** ${metrics.new_prs}
             - 👥 **External Issues:** ${metrics.external_issues}
             - 🚀 **External PRs:** ${metrics.external_prs}
-            
+
             ### Triage Status
             - ✅ **Triaged Issues:** ${metrics.triaged_issues}
             - ⏳ **Needs Triage:** ${metrics.needs_triage}
             - 📝 **Needs Info:** ${metrics.needs_info}
             - 🕐 **Stale Items:** ${metrics.stale_items}
-            
+
             ### Resolution Activity  
             - ✅ **Closed Issues:** ${metrics.closed_issues}
             - 🎉 **Merged PRs:** ${metrics.merged_prs}
-            
+
             ## 🚨 Priority Breakdown
-            
+
             - 🚨 **Critical Issues:** ${metrics.critical_issues}
             - ⚡ **High Priority:** ${metrics.high_priority}
             - 🔒 **Security Issues:** ${metrics.security_issues}
             - 🐛 **Bug Reports:** ${metrics.bug_reports}
-            
+
             ## ⏱️ Response Times
-            
+
             - 📭 **No Response (3+ days):** ${metrics.no_response_3d}
             - 📭 **No Response (7+ days):** ${metrics.no_response_7d}
-            
+
             ## 📚 Specialized Areas
-            
+
             - 📖 **Documentation Issues:** ${metrics.docs_issues}
             - 🏷️ **Categorized Issues:** ${metrics.triaged_issues + metrics.needs_triage}
-            
+
             ## 🎯 Action Items
-            
+
             ${metrics.needs_triage > 10 ? '- ⚠️ **High triage backlog** - Consider additional triage sessions' : ''}
             ${metrics.no_response_3d > 5 ? '- ⚠️ **Response time issues** - Focus on initial responses' : ''}
             ${metrics.critical_issues > 0 ? `- 🚨 **${metrics.critical_issues} critical issues** need immediate attention` : ''}
             ${triageRate < 60 ? '- 📊 **Low triage rate** - Improve issue labeling process' : ''}
             ${responseRate < 75 ? '- 💬 **Improve response times** - Set up better notifications' : ''}
-            
+
             ## 📊 Trends
-            
+
             ${triageRate >= 80 ? '✅ Triage process is working well' : ''}
             ${responseRate >= 90 ? '✅ Community engagement is excellent' : ''}
             ${metrics.external_issues > metrics.external_prs ? '📝 More external issues than PRs - consider encouraging contributions' : ''}
             ${metrics.stale_items > 20 ? '🧹 Consider stale item cleanup' : ''}
-            
+
             ---
-            
+
             *This report was automatically generated by the triage metrics workflow. For questions or suggestions, please create an issue.*`;
-            
+
             // Create issue with the report
             await github.rest.issues.create({
               owner: context.repo.owner,
@@ -187,7 +187,7 @@ jobs:
               body: report,
               labels: ['triage-report', 'maintenance', 'metrics']
             });
-            
+
             console.log('📊 Triage report generated and posted as an issue');
             console.log(`Key metrics: Triage ${triageRate}%, Response ${responseRate}%, Resolution ${resolutionRate}%`);
 
@@ -202,9 +202,9 @@ jobs:
               'security-team': 'label:security',
               'docs-team': 'label:documentation'
             };
-            
+
             console.log('👥 Team Performance Summary:');
-            
+
             for (const [team, labelFilter] of Object.entries(teamQueries)) {
               const openQuery = `repo:${context.repo.owner}/${context.repo.repo} is:open is:issue ${labelFilter}`;
               const { data: openIssues } = await github.rest.search.issuesAndPullRequests({
@@ -214,7 +214,7 @@ jobs:
               
               console.log(`${team}: ${openIssues.total_count} open issues`);
             }
-            
+
             // Check for bottlenecks
             const bottleneckQueries = {
               'Needs Triage': 'is:open is:issue -label:triaged -label:wontfix',
@@ -222,7 +222,7 @@ jobs:
               'Critical Backlog': 'is:open is:issue label:priority-critical',
               'Long Open': `is:open is:issue created:<${new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}`
             };
-            
+
             console.log('\n🚨 Potential Bottlenecks:');
             for (const [category, query] of Object.entries(bottleneckQueries)) {
               const fullQuery = `repo:${context.repo.owner}/${context.repo.repo} ${query}`;

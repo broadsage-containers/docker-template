@@ -1,7 +1,7 @@
 # Copyright Broadcom, Inc. All Rights Reserved.
 # SPDX-License-Identifier: APACHE-2.0
 
-name: '[Support] Team Assignment and Notifications'
+name: "[Support] Team Assignment and Notifications"
 
 on:
   issues:
@@ -30,7 +30,7 @@ jobs:
             const issue = context.payload.issue || context.payload.pull_request;
             const isIssue = !!context.payload.issue;
             const labels = issue.labels.map(label => label.name);
-            
+
             // Team assignment rules based on labels
             const teamAssignments = {
               'security': {
@@ -54,7 +54,7 @@ jobs:
                 message: '🚨 **Critical Priority - On-Call Team Notified**\n\nThis critical issue has been escalated to the on-call team for immediate attention.'
               }
             };
-            
+
             // Check for team assignment based on labels
             for (const label of labels) {
               if (teamAssignments[label]) {
@@ -90,7 +90,7 @@ jobs:
             const pr = context.payload.pull_request;
             const author = pr.user.login;
             const labels = pr.labels.map(label => label.name);
-            
+
             // Check if this is an external contribution (not from org members)
             let isExternalContribution = true;
             try {
@@ -102,7 +102,7 @@ jobs:
             } catch (error) {
               // User is not an org member, so it's external
             }
-            
+
             if (isExternalContribution && !labels.includes('dependencies')) {
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
@@ -132,7 +132,7 @@ jobs:
           script: |
             const issue = context.payload.issue || context.payload.pull_request;
             const labels = issue.labels.map(label => label.name);
-            
+
             // Handle critical/urgent issues
             if (labels.includes('priority-critical')) {
               // Create a summary for urgent notification
@@ -159,7 +159,7 @@ jobs:
               // - PagerDuty alerts
               // - Microsoft Teams
             }
-            
+
             // Handle security issues
             if (labels.includes('security')) {
               console.log(`🔐 Security issue detected: #${issue.number}`);

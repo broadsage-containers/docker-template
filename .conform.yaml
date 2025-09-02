@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage <opensource@broadsage.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+---
+policies:
+  - type: commit
+    spec:
+      dco: true
+      gpg:
+        required: true
+      header:
+        length: 90
+        imperative: true
+        case: lower
+        invalidLastCharacters: .
+      body:
+        required: false
+      conventional:
+        types:
+          [
+            "chore",
+            "ci",
+            "docs",
+            "perf",
+            "refactor",
+            "style",
+            "test",
+            "release",
+          ]
+        scopes: [".*"]

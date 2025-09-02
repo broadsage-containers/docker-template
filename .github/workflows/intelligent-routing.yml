@@ -1,7 +1,7 @@
 # Copyright Broadcom, Inc. All Rights Reserved.
 # SPDX-License-Identifier: APACHE-2.0
 
-name: '[Support] Intelligent Issue Routing'
+name: "[Support] Intelligent Issue Routing"
 
 on:
   issues:
@@ -33,7 +33,7 @@ jobs:
             const body = (issue.body || '').toLowerCase();
             const labels = [];
             const comments = [];
-            
+
             // Content analysis rules for automatic routing
             const routingRules = {
               // Container and Docker related
@@ -68,7 +68,7 @@ jobs:
                 message: '📚 **Documentation Issue Detected**\n\nThis appears to be documentation-related. The documentation team has been notified.'
               },
             };
-            
+
             // Analyze content and apply rules
             let matchedCategory = null;
             for (const [category, rule] of Object.entries(routingRules)) {
@@ -83,16 +83,16 @@ jobs:
                 break; // Apply only the first matching rule
               }
             }
-            
+
             // Special handling for specific patterns
-            
+
             // Check for version-specific issues
             const versionMatch = body.match(/version[:\s]+([0-9]+\.[0-9]+(?:\.[0-9]+)?)/i);
             if (versionMatch) {
               labels.push(`version/${versionMatch[1]}`);
               comments.push(`🏷️ **Version Detected**: This issue is related to version \`${versionMatch[1]}\``);
             }
-            
+
             // Check for environment-specific issues
             const envKeywords = {
               'env/kubernetes': ['kubernetes', 'k8s', 'kubectl', 'helm', 'pod'],
@@ -100,14 +100,14 @@ jobs:
               'env/production': ['production', 'prod', 'live'],
               'env/development': ['development', 'dev', 'local']
             };
-            
+
             for (const [envLabel, keywords] of Object.entries(envKeywords)) {
               if (keywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
                 labels.push(envLabel);
                 break;
               }
             }
-            
+
             // Platform detection
             const platformKeywords = {
               'platform/linux': ['linux', 'ubuntu', 'debian', 'centos', 'rhel'],
@@ -116,13 +116,13 @@ jobs:
               'arch/arm64': ['arm64', 'aarch64', 'apple silicon', 'm1', 'm2'],
               'arch/amd64': ['amd64', 'x86_64', 'intel']
             };
-            
+
             for (const [platformLabel, keywords] of Object.entries(platformKeywords)) {
               if (keywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
                 labels.push(platformLabel);
               }
             }
-            
+
             // Severity assessment
             const severityKeywords = {
               'severity/critical': ['critical', 'urgent', 'production down', 'outage', 'data loss'],
@@ -130,14 +130,14 @@ jobs:
               'severity/medium': ['important', 'significant'],
               'severity/low': ['minor', 'cosmetic', 'enhancement']
             };
-            
+
             for (const [severityLabel, keywords] of Object.entries(severityKeywords)) {
               if (keywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
                 labels.push(severityLabel);
                 break;
               }
             }
-            
+
             // Apply labels
             if (labels.length > 0) {
               await github.rest.issues.addLabels({
@@ -147,7 +147,7 @@ jobs:
                 labels: [...new Set(labels)] // Remove duplicates
               });
             }
-            
+
             // Post routing information
             if (comments.length > 0) {
               const routingComment = `🤖 **Automated Issue Routing**
@@ -174,7 +174,7 @@ jobs:
                 body: routingComment
               });
             }
-            
+
             // Log routing decision
             console.log(`📊 Issue Routing Summary:
             - Issue: #${issue.number}
@@ -191,10 +191,10 @@ jobs:
             const issue = context.payload.issue;
             const title = issue.title.toLowerCase();
             const body = (issue.body || '').toLowerCase();
-            
+
             // Search for similar issues
             const searchQuery = `repo:${context.repo.owner}/${context.repo.repo} is:issue "${title.slice(0, 50)}"`;
-            
+
             try {
               const { data: similarIssues } = await github.rest.search.issuesAndPullRequests({
                 q: searchQuery,

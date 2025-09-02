@@ -1,4 +1,4 @@
-name: '[CI/CD] Publish Approved PR'
+name: "[CI/CD] Publish Approved PR"
 
 on:
   workflow_run:
@@ -49,7 +49,7 @@ jobs:
             const { owner, repo } = context.repo;
             const headBranch = context.payload.workflow_run.head_branch;
             const headSha = context.payload.workflow_run.head_sha;
-            
+
             // Find the PR associated with this workflow run
             const { data: prs } = await github.rest.pulls.list({
               owner,
@@ -57,25 +57,25 @@ jobs:
               state: 'open',
               head: `${owner}:${headBranch}`
             });
-            
+
             const pr = prs.find(pr => pr.head.sha === headSha);
-            
+
             if (!pr) {
               core.setFailed('No open PR found for this workflow run');
               return;
             }
-            
+
             const prNumber = pr.number;
             const prAuthor = pr.user.login;
             const prRepo = pr.head.repo.full_name;
             const trustedRepo = `${owner}/${repo}`;
             const isFromSameRepo = prRepo === trustedRepo;
-            
+
             // Check if PR has the 'safe to test' label (manual approval for publishing)
             const hasSafeToTestLabel = pr.labels.some(
               label => label.name === 'safe to test'
             );
-            
+
             // Check if author is a collaborator
             let isCollaborator = false;
             try {
@@ -88,28 +88,28 @@ jobs:
             } catch (error) {
               isCollaborator = false;
             }
-            
+
             // Approval logic: either from same repo + collaborator, or external + safe-to-test label
             const approved = (isFromSameRepo && isCollaborator) || hasSafeToTestLabel;
-            
+
             core.info(`PR #${prNumber} Author: ${prAuthor}`);
             core.info(`PR Repository: ${prRepo}`);
             core.info(`Is from same repo: ${isFromSameRepo}`);
             core.info(`Has 'safe to test' label: ${hasSafeToTestLabel}`);
             core.info(`Is collaborator: ${isCollaborator}`);
             core.info(`Approved for publishing: ${approved}`);
-            
+
             if (!approved) {
               core.info(
                 'This PR is not approved for publishing. For external PRs, add the "safe to test" label after review.'
               );
             }
-            
+
             // Set all outputs
             core.setOutput('pr_number', prNumber);
             core.setOutput('pr_head_sha', pr.head.sha);
             core.setOutput('approved', approved);
-            
+
             return { pr_number: prNumber, pr_head_sha: pr.head.sha, approved: approved };
 
   # Matrix generation job to discover containers to build
@@ -138,33 +138,35 @@ jobs:
         run: |
           # Get the base branch commit
           base_sha=$(git merge-base origin/main HEAD)
-          
+
           # Get changed files between base and current commit
           changed_files=$(git diff --name-only "$base_sha" HEAD | grep -E '^broadsage/' | grep -v -E '\.(md|txt)$|LICENSE$|\.github/' || true)
-          
+
           echo "Changed files:"
           echo "$changed_files"
-          
+
           # Set output for the matrix generation step
-          echo "changed_files<<EOF" >> $GITHUB_OUTPUT
-          echo "$changed_files" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          {
+            echo "changed_files<<EOF"
+            echo "$changed_files"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Generate build matrix
         id: generate-matrix
         run: |
           set -euo pipefail
-          
+
           changed_files="${{ steps.changed-files.outputs.changed_files }}"
-          
+
           echo "Debug: Changed files:"
           echo "$changed_files"
-          
+
           # Initialize containers array
           containers=()
-          
+
           echo "Discovering containers from changed files"
-          
+
           # Process changed files
           while IFS= read -r file; do
             if [[ -n "$file" && "$file" =~ ^broadsage/([^/]+)/([^/]+)/([^/]+)/ ]]; then
@@ -174,10 +176,10 @@ jobs:
               fi
             fi
           done <<< "$changed_files"
-          
+
           # Remove duplicates and create matrix
           if [[ ${#containers[@]} -gt 0 ]]; then
-            unique_containers=($(printf "%s\n" "${containers[@]}" | sort -u))
+            mapfile -t unique_containers < <(printf "%s\n" "${containers[@]}" | sort -u)
             echo "Found containers to build: ${unique_containers[*]}"
             
             # Generate JSON matrix
@@ -196,13 +198,13 @@ jobs:
             done
             matrix_json+="]"
             
-            echo "matrix={\"include\":$matrix_json}" >> $GITHUB_OUTPUT
-            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "matrix={\"include\":$matrix_json}" >> "$GITHUB_OUTPUT"
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
             echo "Generated matrix: $matrix_json"
           else
             echo "No containers found to build"
-            echo "matrix={\"include\":[]}" >> $GITHUB_OUTPUT
-            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "matrix={\"include\":[]}" >> "$GITHUB_OUTPUT"
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
           fi
 
   # Build, test and publish container images
@@ -250,18 +252,18 @@ jobs:
           PR_NUMBER: ${{ needs.pr-info-and-security.outputs.pr_number }}
         run: |
           set -euo pipefail
-          
+
           # Generate image name
           image_name="${REGISTRY}/${IMAGE_NAMESPACE}/${APP}"
-          
+
           # Generate development tags for approved PRs
           short_sha=$(echo "${{ github.event.workflow_run.head_sha }}" | cut -c1-7)
           tags="${image_name}:${VERSION}-${PLATFORM}-pr-${PR_NUMBER}-${short_sha}"
           tags="${tags},${image_name}:pr-${PR_NUMBER}-latest"
-          
-          echo "image_name=${image_name}" >> $GITHUB_OUTPUT
-          echo "tags=${tags}" >> $GITHUB_OUTPUT
-          
+
+          echo "image_name=${image_name}" >> "$GITHUB_OUTPUT"
+          echo "tags=${tags}" >> "$GITHUB_OUTPUT"
+
           # Generate labels
           labels=$(cat <<EOF
           org.opencontainers.image.title=${APP}
@@ -277,11 +279,11 @@ jobs:
           org.opencontainers.image.ref.name=pr-${PR_NUMBER}
           EOF
           )
-          
+
           # Convert labels to single line for output
           labels_single_line=$(echo "$labels" | tr '\n' ',' | sed 's/,$//')
-          echo "labels=${labels_single_line}" >> $GITHUB_OUTPUT
-          
+          echo "labels=${labels_single_line}" >> "$GITHUB_OUTPUT"
+
           echo "Generated metadata for ${CONTAINER}:"
           echo "  Image: ${image_name}"
           echo "  Tags: ${tags}"
@@ -319,15 +321,15 @@ jobs:
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # master
         with:
           image-ref: ${{ steps.build-metadata.outputs.image_name }}@${{ steps.build.outputs.digest }}
-          format: 'sarif'
-          output: 'trivy-results.sarif'
+          format: "sarif"
+          output: "trivy-results.sarif"
 
       - name: Upload Trivy scan results
         uses: github/codeql-action/upload-sarif@2d92b76c45b91eb80fc44c74ce3fce0ee94e8f9d # v3.30.0
         if: always()
         with:
-          sarif_file: 'trivy-results.sarif'
-          category: 'trivy-approved-pr'
+          sarif_file: "trivy-results.sarif"
+          category: "trivy-approved-pr"
 
   # Update PR with build results
   update-pr-status:
@@ -347,15 +349,15 @@ jobs:
           script: |
             const { owner, repo } = context.repo;
             const prNumber = '${{ needs.pr-info-and-security.outputs.pr_number }}';
-            
+
             const securityResult = '${{ needs.pr-info-and-security.result }}';
             const discoverResult = '${{ needs.discover-containers.result }}';
             const buildResult = '${{ needs.build-and-publish.result }}';
             const hasChanges = '${{ needs.discover-containers.outputs.has_changes }}';
             const approved = '${{ needs.pr-info-and-security.outputs.approved }}';
-            
+
             let message = '## 🔄 Workflow Run Results\n\n';
-            
+
             if (approved === 'true') {
               if (hasChanges === 'true') {
                 if (buildResult === 'success') {
@@ -374,12 +376,12 @@ jobs:
             } else {
               message += '⚠️ **PR not approved for publishing.** Add the "safe to test" label to approve external PRs for publishing.\n\n';
             }
-            
+
             message += '📋 **Status Summary:**\n';
             message += `- Security Check: ${securityResult === 'success' ? '✅' : '❌'}\n`;
             message += `- Container Discovery: ${discoverResult === 'success' ? '✅' : '❌'}\n`;
             message += `- Build & Publish: ${buildResult === 'success' ? '✅' : buildResult === 'skipped' ? '⏭️ Skipped' : '❌'}\n`;
-            
+
             await github.rest.issues.createComment({
               owner,
               repo,

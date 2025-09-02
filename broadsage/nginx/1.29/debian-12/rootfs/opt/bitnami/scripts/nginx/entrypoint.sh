@@ -24,11 +24,10 @@ print_welcome_page
 debug "Copying files from $NGINX_DEFAULT_CONF_DIR to $NGINX_CONF_DIR"
 cp -nr "$NGINX_DEFAULT_CONF_DIR"/. "$NGINX_CONF_DIR" || true
 
-
 if [[ "$1" = "/opt/bitnami/scripts/nginx/run.sh" ]]; then
-    info "** Starting NGINX setup **"
-    /opt/bitnami/scripts/nginx/setup.sh
-    info "** NGINX setup finished! **"
+  info "** Starting NGINX setup **"
+  /opt/bitnami/scripts/nginx/setup.sh
+  info "** NGINX setup finished! **"
 fi
 
 echo ""
