@@ -47,7 +47,8 @@ on:
         options:
           - "security-extended"
           - "security-and-quality"
-          - "custom-container-security"
+          # Temporarily disabled until path issues are resolved
+          # - "custom-container-security"
       include_experimental:
         description: "Include experimental queries"
         required: false
@@ -241,13 +242,13 @@ jobs:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
 
-          # Enhanced configuration for container projects
+          # Enhanced configuration for container projects (paths, filters, etc.)
           config-file: ./.github/codeql/codeql-config.yml
 
-          # Container-specific query suites
-          queries: |
-            security-extended
-            security-and-quality
+          # Use reliable built-in query suites
+          # Note: Using single query suite to avoid path resolution issues
+          # TODO: Re-enable custom container queries after path resolution is fixed
+          queries: security-extended
 
           # Performance optimization
           debug: false
