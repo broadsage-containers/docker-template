@@ -1,4 +1,4 @@
-name: '[CI/CD] CI Pipeline'
+name: '[CI/CD] Release Pipeline'
 
 on:
   workflow_dispatch:
