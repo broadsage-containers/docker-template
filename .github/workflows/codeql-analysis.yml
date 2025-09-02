@@ -80,12 +80,18 @@ jobs:
         uses: step-security/harden-runner@5c7944e73c4c2a096b17a9cb74d65b6c2bbafbde # v2.9.1
         with:
           egress-policy: audit
-          disable-sudo: true
+          disable-sudo: false  # Enable sudo for package installation
           allowed-endpoints: >
             api.github.com:443
             github.com:443
             objects.githubusercontent.com:443
             registry.npmjs.org:443
+            archive.ubuntu.com:443
+            security.ubuntu.com:443
+            packages.microsoft.com:443
+            github.com:80
+            archive.ubuntu.com:80
+            security.ubuntu.com:80
 
       - name: Checkout repository
         uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
@@ -117,19 +123,29 @@ jobs:
         run: |
           echo "🔍 Running shell script security analysis..."
           
-          # Install shellcheck
-          sudo apt-get update -q
-          sudo apt-get install -y shellcheck
+          # Install shellcheck efficiently
+          echo "📦 Installing ShellCheck..."
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends shellcheck
+          
+          # Verify installation
+          shellcheck --version
           
           # Find and check shell scripts
+          echo "🔍 Discovering shell scripts..."
           shell_scripts=$(find . -name "*.sh" -type f | head -50)
           if [ -n "$shell_scripts" ]; then
-            echo "Found shell scripts for analysis:"
+            echo "Found $(echo "$shell_scripts" | wc -l) shell scripts for analysis:"
             echo "$shell_scripts"
             
+            echo "🔍 Running ShellCheck analysis..."
             for script in $shell_scripts; do
               echo "🔍 Checking: $script"
-              shellcheck "$script" --format=json --severity=warning || true
+              if shellcheck "$script" --format=json --severity=warning; then
+                echo "✅ $script: No issues found"
+              else
+                echo "⚠️ $script: Issues detected (non-blocking)"
+              fi
             done
           else
             echo "⚠️ No shell scripts found for analysis"
@@ -178,6 +194,10 @@ jobs:
             pypi.org:443
             files.pythonhosted.org:443
             download.docker.com:443
+            archive.ubuntu.com:443
+            security.ubuntu.com:443
+            archive.ubuntu.com:80
+            security.ubuntu.com:80
 
       # Checkout repository with enhanced options
       - name: Checkout repository
@@ -268,12 +288,7 @@ jobs:
             npm ci --production --ignore-scripts || echo "⚠️ Failed to install Node.js deps"
           fi
           
-          # Shell script analysis tools
-          if [ "${{ steps.discovery.outputs.shell_scripts }}" -gt "0" ]; then
-            echo "Installing shell analysis tools..."
-            sudo apt-get update -q
-            sudo apt-get install -y shellcheck || echo "⚠️ Failed to install shellcheck"
-          fi
+          echo "✅ Container dependencies installation complete"
 
       # Perform Enhanced CodeQL Analysis
       - name: Perform CodeQL Analysis
@@ -293,11 +308,18 @@ jobs:
           echo "🐳 Container Security Analysis Complete"
           echo "Language: ${{ matrix.language }}"
           echo "Analysis category: /language:${{ matrix.language }}/container-security"
+          
+          # Re-discover files for summary
+          dockerfiles=$(find . -name "Dockerfile*" -type f | wc -l)
+          shell_scripts=$(find . -name "*.sh" -type f | wc -l)
+          python_files=$(find . -name "*.py" -type f | wc -l)
+          js_files=$(find . -name "*.js" -o -name "*.ts" -type f | wc -l)
+          
           echo "Files analyzed:"
-          echo "  - Dockerfiles: ${{ steps.discovery.outputs.dockerfiles }}"
-          echo "  - Shell scripts: ${{ steps.discovery.outputs.shell_scripts }}"
-          echo "  - Python files: ${{ steps.discovery.outputs.python_files }}"
-          echo "  - JS/TS files: ${{ steps.discovery.outputs.js_files }}"
+          echo "  - Dockerfiles: $dockerfiles"
+          echo "  - Shell scripts: $shell_scripts"
+          echo "  - Python files: $python_files"
+          echo "  - JS/TS files: $js_files"
 
   # Enhanced summary job with container-specific reporting
   container-security-summary:
