@@ -20,15 +20,15 @@ set -o pipefail
 error_code=0
 
 if is_nginx_not_running; then
-    "${NGINX_SBIN_DIR}/nginx" -c "$NGINX_CONF_FILE"
-    if ! retry_while "is_nginx_running"; then
-        error "nginx did not start"
-        error_code=1
-    else
-        info "nginx started"
-    fi
+  "${NGINX_SBIN_DIR}/nginx" -c "$NGINX_CONF_FILE"
+  if ! retry_while "is_nginx_running"; then
+    error "nginx did not start"
+    error_code=1
+  else
+    info "nginx started"
+  fi
 else
-    info "nginx is already running"
+  info "nginx is already running"
 fi
 
 exit "$error_code"

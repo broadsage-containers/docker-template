@@ -24,23 +24,23 @@ export BITNAMI_DEBUG="${BITNAMI_DEBUG:-false}"
 # By setting an environment variable matching *_FILE to a file path, the prefixed environment
 # variable will be overridden with the value specified in that file
 nginx_env_vars=(
-    NGINX_HTTP_PORT_NUMBER
-    NGINX_HTTPS_PORT_NUMBER
-    NGINX_SKIP_SAMPLE_CERTS
-    NGINX_ENABLE_STREAM
-    NGINX_ENABLE_ABSOLUTE_REDIRECT
-    NGINX_ENABLE_PORT_IN_REDIRECT
+  NGINX_HTTP_PORT_NUMBER
+  NGINX_HTTPS_PORT_NUMBER
+  NGINX_SKIP_SAMPLE_CERTS
+  NGINX_ENABLE_STREAM
+  NGINX_ENABLE_ABSOLUTE_REDIRECT
+  NGINX_ENABLE_PORT_IN_REDIRECT
 )
 for env_var in "${nginx_env_vars[@]}"; do
-    file_env_var="${env_var}_FILE"
-    if [[ -n "${!file_env_var:-}" ]]; then
-        if [[ -r "${!file_env_var:-}" ]]; then
-            export "${env_var}=$(< "${!file_env_var}")"
-            unset "${file_env_var}"
-        else
-            warn "Skipping export of '${env_var}'. '${!file_env_var:-}' is not readable."
-        fi
+  file_env_var="${env_var}_FILE"
+  if [[ -n "${!file_env_var:-}" ]]; then
+    if [[ -r "${!file_env_var:-}" ]]; then
+      export "${env_var}=$(<"${!file_env_var}")"
+      unset "${file_env_var}"
+    else
+      warn "Skipping export of '${env_var}'. '${!file_env_var:-}' is not readable."
     fi
+  fi
 done
 unset nginx_env_vars
 export WEB_SERVER_TYPE="nginx"
