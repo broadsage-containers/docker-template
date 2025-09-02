@@ -25,7 +25,7 @@ jobs:
           egress-policy: audit
 
       - name: Wait for checks to complete
-        uses: lewagon/wait-on-check-action@e106e5c43e8ca1edea6383a39a01c5ca495fd812 # v1.3.1
+        uses: lewagon/wait-on-check-action@0dceb95e7c4cad8cc7422aee3885998f5cab9c79 # v1.4.0
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           check-name: 'PR Check Summary'
