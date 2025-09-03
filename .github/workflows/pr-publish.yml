@@ -217,11 +217,11 @@ jobs:
     name: Build & Publish
     # Job-level permissions for build and publish operations
     permissions:
-      contents: read          # Required for checkout
-      packages: write         # Required for publishing to container registry
-      security-events: write  # Required for uploading security scan results
-      attestations: write     # Required for signing and generating attestations
-      id-token: write         # Required for OIDC token for signing
+      contents: read # Required for checkout
+      packages: write # Required for publishing to container registry
+      security-events: write # Required for uploading security scan results
+      attestations: write # Required for signing and generating attestations
+      id-token: write # Required for OIDC token for signing
     needs: [pr-info-and-security, discover-containers]
     if: needs.discover-containers.outputs.has_changes == 'true'
     strategy:
@@ -348,7 +348,7 @@ jobs:
     name: Update PR Status
     # Job-level permissions for updating PR status
     permissions:
-      pull-requests: write  # Required for commenting on PRs
+      pull-requests: write # Required for commenting on PRs
     needs: [pr-info-and-security, discover-containers, build-and-publish]
     if: always() && needs.pr-info-and-security.outputs.pr_number
     steps:

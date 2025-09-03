@@ -34,7 +34,7 @@ jobs:
     name: Generate triage metrics report
     # Job-level permissions for reporting
     permissions:
-      issues: write  # For creating report comments/issues
+      issues: write # For creating report comments/issues
       contents: read
     steps:
       - name: Harden the runner (Audit all outbound calls)
