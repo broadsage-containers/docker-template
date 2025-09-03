@@ -1,0 +1,38 @@
+# Auto-labeling configuration
+# Set which labels should be automatically applied
+
+# Enable/disable auto-labeling
+enabled: true
+
+# Maximum number of labels to apply automatically
+max_labels: 3
+
+# Label rules (only these will be auto-applied)
+label_rules:
+  bug:
+    keywords: ['bug', 'error', 'broken', 'crash', 'fail']
+    enabled: true
+  enhancement:
+    keywords: ['feature', 'enhancement']
+    enabled: true
+  security:
+    keywords: ['security', 'vulnerability', 'cve']
+    enabled: true
+  dependencies:
+    keywords: ['dependabot', 'bump dependencies']
+    enabled: true
+  documentation:
+    keywords: ['doc', 'readme', 'guide']
+    enabled: false  # Disabled to reduce auto-labeling
+  question:
+    keywords: ['question', 'how to', 'what is']
+    enabled: false  # Disabled to reduce auto-labeling
+
+# Priority labeling (high-impact only)
+priority_rules:
+  priority-critical:
+    keywords: ['critical', 'urgent', 'severe', 'blocker']
+    enabled: true
+  priority-high:
+    keywords: ['high priority', 'important', 'breaking']
+    enabled: false  # Disabled to reduce auto-labeling
