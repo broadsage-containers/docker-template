@@ -289,7 +289,7 @@ jobs:
           echo "  Labels: ${labels_single_line}"
 
       - name: Build and test image
-        uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
         id: build
         with:
           context: ${{ matrix.container }}
@@ -369,7 +369,7 @@ jobs:
           fi
 
       - name: Build multi-platform image (production)
-        uses: docker/build-push-action@0565240e2d4ab88bba5387d719585280857ece09 # v5.0.0
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
         id: push
         if: |
           (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
