@@ -9,6 +9,7 @@ permissions:
   contents: write
   pull-requests: write
   actions: write
+  checks: read # Add this to read check status
 
 jobs:
   dependabot-auto-merge:
