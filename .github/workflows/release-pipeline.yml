@@ -30,6 +30,7 @@ permissions:
   statuses: write
   id-token: write
   attestations: write
+  actions: write # Add this for workflow management
 
 # Prevent concurrent builds for the same branch
 concurrency:
