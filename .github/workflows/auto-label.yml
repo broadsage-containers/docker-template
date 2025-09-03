@@ -23,32 +23,53 @@ jobs:
         with:
           egress-policy: audit
 
+      - name: Checkout repository
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+
       - name: Label based on title and content
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
         if: github.actor != 'dependabot[bot]'
         with:
           script: |
+            // Load configuration (JSON only for simplicity and reliability)
+            let config;
+            try {
+              const fs = require('fs');
+              const configFile = fs.readFileSync('.github/auto-label-config.json', 'utf8');
+              config = JSON.parse(configFile);
+              console.log('✅ Loaded configuration from auto-label-config.json');
+            } catch (error) {
+              console.log('⚠️ No config file found or error parsing, using defaults');
+              config = {
+                enabled: true,
+                max_labels: 3,
+                label_rules: {
+                  'bug': { keywords: ['bug', 'error', 'broken', 'crash', 'fail'], enabled: true },
+                  'enhancement': { keywords: ['feature', 'enhancement'], enabled: true },
+                  'security': { keywords: ['security', 'vulnerability', 'cve'], enabled: true },
+                  'dependencies': { keywords: ['dependabot', 'bump dependencies'], enabled: true }
+                },
+                priority_rules: {
+                  'priority-critical': { keywords: ['critical', 'urgent', 'severe', 'blocker'], enabled: true },
+                  'priority-high': { keywords: ['high priority', 'important', 'breaking'], enabled: false }
+                }
+              };
+            }
+
+            if (!config.enabled) {
+              console.log('🚫 Auto-labeling is disabled in config');
+              return;
+            }
+
             const issue = context.payload.issue || context.payload.pull_request;
             const isIssue = !!context.payload.issue;
             const title = issue.title.toLowerCase();
             const body = (issue.body || '').toLowerCase();
             const labels = [];
 
-            // Auto-label based on keywords in title and body
-            const labelRules = {
-              'bug': ['bug', 'error', 'broken', 'crash', 'fail', 'issue', 'problem'],
-              'enhancement': ['feature', 'enhancement', 'improve', 'add', 'new'],
-              'documentation': ['doc', 'readme', 'guide', 'tutorial', 'example'],
-              'security': ['security', 'vulnerability', 'cve', 'exploit', 'malicious'],
-              'dependencies': ['dependency', 'upgrade', 'update', 'bump', 'npm', 'pip'],
-              'good first issue': ['beginner', 'newcomer', 'easy', 'simple', 'starter'],
-              'help wanted': ['help', 'assistance', 'support', 'guidance'],
-              'question': ['question', 'how to', 'what is', 'why', 'clarification']
-            };
-
-            // Check title and body for keywords
-            for (const [label, keywords] of Object.entries(labelRules)) {
-              if (keywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
+            // Auto-label based on configuration
+            for (const [label, rule] of Object.entries(config.label_rules || {})) {
+              if (rule.enabled && rule.keywords && rule.keywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
                 labels.push(label);
               }
             }
@@ -66,20 +87,16 @@ jobs:
               }
             }
 
-            // Priority labeling based on urgency keywords
-            const urgencyKeywords = {
-              'priority-critical': ['critical', 'urgent', 'severe', 'blocker', 'production down'],
-              'priority-high': ['high priority', 'important', 'asap', 'breaking']
-            };
-
-            for (const [label, keywords] of Object.entries(urgencyKeywords)) {
-              if (keywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
+            // Priority labeling based on configuration
+            for (const [label, rule] of Object.entries(config.priority_rules || {})) {
+              if (rule.enabled && rule.keywords && rule.keywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
                 labels.push(label);
               }
             }
 
-            // Apply labels if any were found
-            if (labels.length > 0) {
+            // Apply labels if any were found (limit based on config)
+            const maxLabels = config.max_labels || 3;
+            if (labels.length > 0 && labels.length <= maxLabels) {
               await github.rest.issues.addLabels({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -87,7 +104,11 @@ jobs:
                 labels: labels
               });
               
-              console.log(`Applied labels: ${labels.join(', ')}`);
+              console.log(`🏷️ Applied labels: ${labels.join(', ')}`);
+            } else if (labels.length > maxLabels) {
+              console.log(`⚠️ Too many labels would be applied (${labels.length}), max allowed: ${maxLabels}`);
+            } else {
+              console.log('ℹ️ No labels to apply based on content analysis');
             }
 
       - name: Welcome first-time contributors
