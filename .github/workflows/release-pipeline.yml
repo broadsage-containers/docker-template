@@ -401,7 +401,7 @@ jobs:
 
       - name: Attest SBOM
         if: steps.push.outcome == 'success'
-        uses: actions/attest-sbom@5026d3663739160db546203eeaffa6aa1c51a4d6 # v1.4.1
+        uses: actions/attest-sbom@4651f806c01d8637787e274ac3bdf724ef169f34 # v3.0.0
         id: attest-sbom
         with:
           subject-name: ${{ steps.build-metadata.outputs.image_name }}
