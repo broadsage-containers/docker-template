@@ -1,10 +1,10 @@
 {
   "_comment": "Auto-labeling configuration for GitHub Issues and Pull Requests",
   "_description": "Set enabled to false to disable auto-labeling entirely. Adjust max_labels to control how many labels can be applied automatically.",
-  
+
   "enabled": true,
   "max_labels": 3,
-  
+
   "label_rules": {
     "bug": {
       "keywords": ["bug", "error", "broken", "crash", "fail", "not working"],
@@ -35,7 +35,7 @@
       "enabled": false
     }
   },
-  
+
   "priority_rules": {
     "priority-critical": {
       "keywords": ["critical", "urgent", "severe", "blocker", "production"],
