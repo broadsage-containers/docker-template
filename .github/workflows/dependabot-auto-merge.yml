@@ -5,19 +5,23 @@ on:
     types: [opened, synchronize]
     branches: [main]
 
+# Use restrictive default permissions
 permissions:
-  contents: write
-  pull-requests: write
-  actions: write
-  checks: read # Add this to read check status
+  contents: read
 
 jobs:
   dependabot-auto-merge:
     runs-on: ubuntu-latest
     name: Auto-merge Dependabot PRs
+    # Explicit job-level permissions following least privilege principle
+    permissions:
+      contents: write # Required for merging PRs
+      pull-requests: write # Required for approving and merging PRs
+      checks: read # Required to read check status
     if: |
       github.actor == 'dependabot[bot]' &&
-      contains(github.event.pull_request.labels.*.name, 'dependencies')
+      contains(github.event.pull_request.labels.*.name, 'dependencies') &&
+      github.event.pull_request.draft == false
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
@@ -32,28 +36,61 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           wait-interval: 30
           allowed-conclusions: success
+        continue-on-error: true
+        id: wait-for-checks
+
+      - name: Check if ready for merge
+        if: steps.wait-for-checks.outcome == 'success'
+        run: echo "✅ All checks passed, proceeding with auto-merge"
+
+      - name: Skip auto-merge if checks failed
+        if: steps.wait-for-checks.outcome != 'success'
+        run: |
+          echo "⚠️ Checks did not pass or timed out, skipping auto-merge"
+          echo "This is likely due to permission issues or failing tests"
+          exit 0
 
       - name: Auto-approve dependabot PRs
+        if: steps.wait-for-checks.outcome == 'success'
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            await github.rest.pulls.createReview({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.issue.number,
-              event: 'APPROVE',
-              body: '✅ Auto-approved dependabot PR after successful tests'
-            });
+            try {
+              await github.rest.pulls.createReview({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number,
+                event: 'APPROVE',
+                body: '✅ Auto-approved dependabot PR after successful tests'
+              });
+              console.log('✅ Successfully approved PR');
+            } catch (error) {
+              console.log('⚠️ Error approving PR:', error.message);
+              // Don't fail the workflow for approval errors
+            }
 
       - name: Enable auto-merge
+        if: steps.wait-for-checks.outcome == 'success'
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            await github.rest.pulls.merge({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.issue.number,
-              merge_method: 'squash'
-            });
+            try {
+              await github.rest.pulls.merge({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number,
+                merge_method: 'squash',
+                commit_title: `${context.payload.pull_request.title} (#${context.issue.number})`,
+                commit_message: 'Auto-merged by Dependabot workflow'
+              });
+              console.log('✅ Successfully merged PR');
+            } catch (error) {
+              console.log('❌ Error merging PR:', error.message);
+              if (error.message.includes('workflows permission')) {
+                console.log('💡 This may be due to missing workflows permission for GitHub Apps');
+                console.log('💡 Check repository Settings > Actions > General > Workflow permissions');
+              }
+              throw error;
+            }

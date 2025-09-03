@@ -23,14 +23,9 @@ on:
     # Run weekly security scans
     - cron: "0 2 * * 0"
 
+# Use restrictive default permissions
 permissions:
   contents: read
-  packages: write
-  security-events: write
-  statuses: write
-  id-token: write
-  attestations: write
-  actions: write # Add this for workflow management
 
 # Prevent concurrent builds for the same branch
 concurrency:
@@ -48,6 +43,9 @@ jobs:
   discover-containers:
     runs-on: ubuntu-latest
     name: Discover Modified Containers
+    # Job-level permissions for discovery
+    permissions:
+      contents: read
     if: |
       (github.event_name == 'push' || 
        github.event_name == 'workflow_dispatch' ||
@@ -55,8 +53,6 @@ jobs:
     outputs:
       matrix: ${{ steps.generate-matrix.outputs.matrix }}
       has_changes: ${{ steps.generate-matrix.outputs.has_changes }}
-    permissions:
-      contents: read
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
