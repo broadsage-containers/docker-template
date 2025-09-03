@@ -7,13 +7,17 @@ on:
   workflow_dispatch:
     # Manual trigger only - run once to set up labels
 
+# Use restrictive default permissions
 permissions:
-  issues: write
+  contents: read
 
 jobs:
   setup-labels:
     runs-on: ubuntu-latest
     name: Setup standard labels
+    # Job-level permissions for label management
+    permissions:
+      issues: write
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0

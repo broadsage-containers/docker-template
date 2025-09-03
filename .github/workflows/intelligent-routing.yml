@@ -9,14 +9,18 @@ on:
   pull_request:
     types: [opened]
 
+# Use restrictive default permissions
 permissions:
-  issues: write
-  pull-requests: write
+  contents: read
 
 jobs:
   intelligent-routing:
     runs-on: ubuntu-latest
     name: Route issues to appropriate teams
+    # Job-level permissions for routing operations
+    permissions:
+      issues: write
+      pull-requests: write
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0

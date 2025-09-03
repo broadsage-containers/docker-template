@@ -18,15 +18,19 @@ on:
         required: false
         type: string
 
+# Use restrictive default permissions
 permissions:
-  issues: write
-  pull-requests: write
   contents: read
 
 jobs:
   triage:
     runs-on: ubuntu-latest
     name: Triage issues and pull requests
+    # Job-level permissions for triage operations
+    permissions:
+      issues: write
+      pull-requests: write
+      contents: read
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0

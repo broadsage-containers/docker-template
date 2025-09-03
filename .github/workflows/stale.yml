@@ -10,14 +10,18 @@ on:
   workflow_dispatch:
     # Allow manual triggering
 
+# Use restrictive default permissions
 permissions:
-  issues: write
-  pull-requests: write
+  contents: read
 
 jobs:
   stale:
     runs-on: ubuntu-latest
     name: Stale issue job
+    # Job-level permissions for stale operations
+    permissions:
+      issues: write
+      pull-requests: write
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
