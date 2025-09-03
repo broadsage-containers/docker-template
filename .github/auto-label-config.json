@@ -1,0 +1,49 @@
+{
+  "_comment": "Auto-labeling configuration for GitHub Issues and Pull Requests",
+  "_description": "Set enabled to false to disable auto-labeling entirely. Adjust max_labels to control how many labels can be applied automatically.",
+  
+  "enabled": true,
+  "max_labels": 3,
+  
+  "label_rules": {
+    "bug": {
+      "keywords": ["bug", "error", "broken", "crash", "fail", "not working"],
+      "enabled": true
+    },
+    "enhancement": {
+      "keywords": ["feature", "enhancement", "improvement", "add"],
+      "enabled": true
+    },
+    "security": {
+      "keywords": ["security", "vulnerability", "cve", "exploit"],
+      "enabled": true
+    },
+    "dependencies": {
+      "keywords": ["dependabot", "bump dependencies", "update dependencies"],
+      "enabled": true
+    },
+    "documentation": {
+      "keywords": ["doc", "readme", "guide", "documentation"],
+      "enabled": false
+    },
+    "question": {
+      "keywords": ["question", "how to", "what is", "help"],
+      "enabled": false
+    },
+    "good first issue": {
+      "keywords": ["beginner", "newcomer", "easy", "simple", "starter"],
+      "enabled": false
+    }
+  },
+  
+  "priority_rules": {
+    "priority-critical": {
+      "keywords": ["critical", "urgent", "severe", "blocker", "production"],
+      "enabled": true
+    },
+    "priority-high": {
+      "keywords": ["high priority", "important", "breaking", "asap"],
+      "enabled": false
+    }
+  }
+}
