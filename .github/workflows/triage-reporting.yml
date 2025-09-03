@@ -24,14 +24,18 @@ on:
         type: number
         default: 7
 
+# Use restrictive default permissions
 permissions:
-  issues: write
   contents: read
 
 jobs:
   triage-report:
     runs-on: ubuntu-latest
     name: Generate triage metrics report
+    # Job-level permissions for reporting
+    permissions:
+      issues: write # For creating report comments/issues
+      contents: read
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0

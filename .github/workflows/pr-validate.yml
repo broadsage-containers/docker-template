@@ -5,9 +5,9 @@ on:
     types: [opened, synchronize, reopened]
     branches: [main]
 
+# Use restrictive default permissions
 permissions:
   contents: read
-  pull-requests: read
 
 # Prevent concurrent builds for the same PR
 concurrency:
@@ -24,6 +24,9 @@ jobs:
   discover-containers:
     runs-on: ubuntu-latest
     name: Discover Modified Containers
+    # Job-level permissions for discovery
+    permissions:
+      contents: read
     outputs:
       matrix: ${{ steps.generate-matrix.outputs.matrix }}
       has_changes: ${{ steps.generate-matrix.outputs.has_changes }}
@@ -110,6 +113,10 @@ jobs:
   lint-dockerfiles:
     runs-on: ubuntu-latest
     name: Lint Dockerfiles
+    # Job-level permissions for linting
+    permissions:
+      contents: read
+      security-events: write # For SARIF upload
     needs: discover-containers
     if: needs.discover-containers.outputs.has_changes == 'true'
     strategy:
@@ -143,6 +150,10 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
     name: Build & Test (Unprivileged)
+    # Job-level permissions for build and test without publishing
+    permissions:
+      contents: read
+      security-events: write # For security scan results
     needs: [discover-containers, lint-dockerfiles]
     if: needs.discover-containers.outputs.has_changes == 'true'
     strategy:
@@ -266,6 +277,9 @@ jobs:
   pr-check-summary:
     runs-on: ubuntu-latest
     name: PR Check Summary
+    # Job-level permissions for status reporting
+    permissions:
+      contents: read
     needs: [discover-containers, lint-dockerfiles, build-and-test]
     if: always()
     steps:
