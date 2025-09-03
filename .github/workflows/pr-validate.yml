@@ -116,7 +116,7 @@ jobs:
     # Job-level permissions for linting
     permissions:
       contents: read
-      security-events: write  # For SARIF upload
+      security-events: write # For SARIF upload
     needs: discover-containers
     if: needs.discover-containers.outputs.has_changes == 'true'
     strategy:
@@ -153,7 +153,7 @@ jobs:
     # Job-level permissions for build and test without publishing
     permissions:
       contents: read
-      security-events: write  # For security scan results
+      security-events: write # For security scan results
     needs: [discover-containers, lint-dockerfiles]
     if: needs.discover-containers.outputs.has_changes == 'true'
     strategy:
