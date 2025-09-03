@@ -31,16 +31,15 @@ jobs:
         if: github.actor != 'dependabot[bot]'
         with:
           script: |
-            const fs = require('fs');
-            const yaml = require('js-yaml');
-            
-            // Load configuration
+            // Load configuration (JSON only for simplicity and reliability)
             let config;
             try {
-              const configFile = fs.readFileSync('.github/auto-label-config.yml', 'utf8');
-              config = yaml.load(configFile);
+              const fs = require('fs');
+              const configFile = fs.readFileSync('.github/auto-label-config.json', 'utf8');
+              config = JSON.parse(configFile);
+              console.log('✅ Loaded configuration from auto-label-config.json');
             } catch (error) {
-              console.log('No config file found, using defaults');
+              console.log('⚠️ No config file found or error parsing, using defaults');
               config = {
                 enabled: true,
                 max_labels: 3,
@@ -58,7 +57,7 @@ jobs:
             }
 
             if (!config.enabled) {
-              console.log('Auto-labeling is disabled in config');
+              console.log('🚫 Auto-labeling is disabled in config');
               return;
             }
 
@@ -69,8 +68,8 @@ jobs:
             const labels = [];
 
             // Auto-label based on configuration
-            for (const [label, rule] of Object.entries(config.label_rules)) {
-              if (rule.enabled && rule.keywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
+            for (const [label, rule] of Object.entries(config.label_rules || {})) {
+              if (rule.enabled && rule.keywords && rule.keywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
                 labels.push(label);
               }
             }
@@ -90,7 +89,7 @@ jobs:
 
             // Priority labeling based on configuration
             for (const [label, rule] of Object.entries(config.priority_rules || {})) {
-              if (rule.enabled && rule.keywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
+              if (rule.enabled && rule.keywords && rule.keywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
                 labels.push(label);
               }
             }
@@ -105,9 +104,11 @@ jobs:
                 labels: labels
               });
               
-              console.log(`Applied labels: ${labels.join(', ')}`);
+              console.log(`🏷️ Applied labels: ${labels.join(', ')}`);
             } else if (labels.length > maxLabels) {
-              console.log(`Too many labels would be applied (${labels.length}), max allowed: ${maxLabels}`);
+              console.log(`⚠️ Too many labels would be applied (${labels.length}), max allowed: ${maxLabels}`);
+            } else {
+              console.log('ℹ️ No labels to apply based on content analysis');
             }
 
       - name: Welcome first-time contributors
