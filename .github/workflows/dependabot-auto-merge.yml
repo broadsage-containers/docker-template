@@ -5,16 +5,19 @@ on:
     types: [opened, synchronize]
     branches: [main]
 
+# Use restrictive default permissions
 permissions:
-  contents: write
-  pull-requests: write
-  actions: write
-  checks: read # Add this to read check status
+  contents: read
 
 jobs:
   dependabot-auto-merge:
     runs-on: ubuntu-latest
     name: Auto-merge Dependabot PRs
+    # Explicit job-level permissions following least privilege principle
+    permissions:
+      contents: write          # Required for merging PRs
+      pull-requests: write     # Required for approving and merging PRs
+      checks: read            # Required to read check status
     if: |
       github.actor == 'dependabot[bot]' &&
       contains(github.event.pull_request.labels.*.name, 'dependencies') &&
