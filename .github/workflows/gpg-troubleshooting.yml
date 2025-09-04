@@ -35,7 +35,13 @@ jobs:
           fingerprint: ${{ secrets.AUTOBOT_GITHUB_GPG_FINGERPRINT }}
           git_user_signingkey: true
           git_commit_gpgsign: true
+          git_config_global: true
           trust_level: 5
+
+      - name: Configure Git for broadsage-autobot
+        run: |
+          git config --global user.name "broadsage-autobot"
+          git config --global user.email "broadsage-autobot@broadsage.com"
 
       - name: Debug GPG Configuration
         run: |
