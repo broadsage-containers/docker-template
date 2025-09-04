@@ -78,10 +78,13 @@ jobs:
         with:
           base: ${{ github.event.pull_request.base.ref }}
           branch: megalinter-fixes-${{ github.event.pull_request.number }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "[MegaLinter] Apply linters automatic fixes"
-          title: "[MegaLinter] Apply linters automatic fixes for PR #${{ github.event.pull_request.number }}"
-          labels: bot
+          token: ${{ secrets.AUTOBOT_GITHUB_TOKEN }}
+          commit-message: |
+            style: apply linter automatic fixes
+
+            Signed-off-by: Broadsage AutoBot <broadsage-autobot@broadsage.com>
+          title: "style: apply mega-linter automatic fixes for PR #${{ github.event.pull_request.number }}"
+          labels: megalinter
           body: |
             This PR contains automatic fixes applied by MegaLinter for PR #${{ github.event.pull_request.number }}.
             
