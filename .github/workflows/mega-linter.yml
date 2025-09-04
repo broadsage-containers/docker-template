@@ -26,13 +26,13 @@ jobs:
   megalinter:
     name: MegaLinter
     runs-on: ubuntu-latest
-    # Job-level permissions - only what's actually needed
+    # Job-level permissions - minimal set required for the workflow
     permissions:
-      contents: write        # Write access for creating branches and PRs for auto-fixes
-      issues: write          # Write access to post issue comments
-      pull-requests: write   # Write access to post PR comments and create PRs
-      statuses: write        # Write access to update commit status
-      security-events: write # Write access to upload SARIF files
+      contents: write        # Required: peter-evans/create-pull-request to create branches/commits
+      pull-requests: write   # Required: peter-evans/create-pull-request + GITHUB_COMMENT_REPORTER
+      statuses: write        # Required: GITHUB_STATUS_REPORTER in MegaLinter config
+      security-events: write # Required: SARIF_REPORTER in MegaLinter config
+      actions: read          # Required: ACTION_ACTIONLINT to read workflow files
     steps:
       # Git Checkout
       - name: Harden the runner (Audit all outbound calls)
