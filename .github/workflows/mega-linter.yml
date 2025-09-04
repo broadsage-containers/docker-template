@@ -78,7 +78,7 @@ jobs:
         with:
           base: ${{ github.event.pull_request.base.ref }}
           branch: megalinter-fixes-${{ github.event.pull_request.number }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.AUTOBOT_GITHUB_TOKEN }}
           commit-message: "[MegaLinter] Apply linters automatic fixes"
           title: "[MegaLinter] Apply linters automatic fixes for PR #${{ github.event.pull_request.number }}"
           labels: bot
