@@ -77,7 +77,7 @@ jobs:
         uses: step-security/changed-files@95b56dadb92a30ca9036f16423fd3c088a71ee94 # v46.0.5
         with:
           files: |
-            broadsage/**
+            library/**
           files_ignore: |
             **/*.md
             **/*.txt
@@ -103,13 +103,13 @@ jobs:
 
           if [[ "$FORCE_BUILD" == "true" || "${{ github.event_name }}" == "schedule" ]]; then
             echo "Force build or scheduled run - discovering all containers"
-            mapfile -t containers < <(find broadsage -name "Dockerfile" -type f | grep -E "broadsage/[^/]+/[^/]+/[^/]+/Dockerfile$" | sed 's|/Dockerfile||g' | sort)
+            mapfile -t containers < <(find library -name "Dockerfile" -type f | grep -E "library/[^/]+/[^/]+/[^/]+/Dockerfile$" | sed 's|/Dockerfile||g' | sort)
           elif [[ -n "$CONTAINERS_FILTER" ]]; then
             echo "Using container filter: $CONTAINERS_FILTER"
             IFS=',' read -ra FILTER_ARRAY <<< "$CONTAINERS_FILTER"
             for filter in "${FILTER_ARRAY[@]}"; do
               filter=$(echo "$filter" | xargs) # trim whitespace
-              mapfile -t found_containers < <(find broadsage -name "Dockerfile" -type f | grep -E "broadsage/$filter/[^/]+/[^/]+/Dockerfile$" | sed 's|/Dockerfile||g' | sort)
+              mapfile -t found_containers < <(find library -name "Dockerfile" -type f | grep -E "library/$filter/[^/]+/[^/]+/Dockerfile$" | sed 's|/Dockerfile||g' | sort)
               containers+=("${found_containers[@]}")
             done
           else
@@ -117,9 +117,9 @@ jobs:
             
             # Regular event handling for push events
             for file in $CHANGED_FILES; do
-              # Extract container path pattern: broadsage/{app}/{version}/{platform}
-              if [[ "$file" =~ ^broadsage/([^/]+)/([^/]+)/([^/]+)/ ]]; then
-                container_path="broadsage/${BASH_REMATCH[1]}/${BASH_REMATCH[2]}/${BASH_REMATCH[3]}"
+              # Extract container path pattern: library/{app}/{version}/{platform}
+              if [[ "$file" =~ ^library/([^/]+)/([^/]+)/([^/]+)/ ]]; then
+                container_path="library/${BASH_REMATCH[1]}/${BASH_REMATCH[2]}/${BASH_REMATCH[3]}"
                 if [[ -f "$container_path/Dockerfile" ]]; then
                   containers+=("$container_path")
                 fi
