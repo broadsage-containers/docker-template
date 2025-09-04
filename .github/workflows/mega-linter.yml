@@ -29,11 +29,11 @@ jobs:
     runs-on: ubuntu-latest
     # Job-level permissions - minimal set required for the workflow
     permissions:
-      contents: write        # Required: peter-evans/create-pull-request to create branches/commits
-      pull-requests: write   # Required: peter-evans/create-pull-request + GITHUB_COMMENT_REPORTER
-      statuses: write        # Required: GITHUB_STATUS_REPORTER in MegaLinter config
+      contents: write # Required: peter-evans/create-pull-request to create branches/commits
+      pull-requests: write # Required: peter-evans/create-pull-request + GITHUB_COMMENT_REPORTER
+      statuses: write # Required: GITHUB_STATUS_REPORTER in MegaLinter config
       security-events: write # Required: SARIF_REPORTER in MegaLinter config
-      actions: read          # Required: ACTION_ACTIONLINT to read workflow files
+      actions: read # Required: ACTION_ACTIONLINT to read workflow files
     steps:
       # Git Checkout
       - name: Harden the runner (Audit all outbound calls)
@@ -98,22 +98,24 @@ jobs:
           labels: megalinter
           body: |
             This PR contains automatic fixes applied by MegaLinter for PR #${{ github.event.pull_request.number }}.
-            
+
             **Changes:**
             - Automatic code formatting fixes
             - Linter compliance fixes
-            
+
             **Next Steps:**
             📋 **Please apply these fixes to your original PR**
             1. Merge this branch into your original PR branch
             2. Close this MegaLinter PR
             3. Continue with your original PR review process
-            
+
             ⚠️ **Important**: Do not merge this PR directly - apply the fixes to your original PR instead.
       - name: Comment on original PR
         if: steps.cpr.outputs.pull-request-number && github.event_name == 'pull_request'
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
         continue-on-error: true # Don't fail the workflow if commenting fails
+        env:
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
         with:
           github-token: ${{ secrets.AUTOBOT_GITHUB_TOKEN }}
           script: |
@@ -121,6 +123,7 @@ jobs:
               const fixPrUrl = "${{ steps.cpr.outputs.pull-request-url }}";
               const fixPrNumber = "${{ steps.cpr.outputs.pull-request-number }}";
               const originalPrNumber = context.payload.pull_request.number;
+              const prHeadRef = process.env.PR_HEAD_REF;
               
               const comment = `## 🤖 MegaLinter Auto-Fix Available
               
@@ -133,9 +136,9 @@ jobs:
               \`\`\`bash
               # Fetch and merge the linter fixes
               git fetch origin megalinter-fixes-${originalPrNumber}
-              git checkout ${{ github.event.pull_request.head.ref }}
+              git checkout ${prHeadRef}
               git merge origin/megalinter-fixes-${originalPrNumber}
-              git push origin ${{ github.event.pull_request.head.ref }}
+              git push origin ${prHeadRef}
               \`\`\`
               
               After merging the fixes, please close the auto-fix PR #${fixPrNumber}.
