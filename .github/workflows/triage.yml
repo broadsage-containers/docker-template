@@ -58,9 +58,10 @@ jobs:
             const hasExpectedBehavior = body.includes('Expected') || body.includes('expected');
 
             // Validate bug reports
-            if (title.toLowerCase().includes('bug') || body.toLowerCase().includes('bug')) {
+            if (title.toLowerCase().includes('bug') || title.toLowerCase().includes('fix') || 
+                body.toLowerCase().includes('bug') || body.toLowerCase().includes('error')) {
               if (!hasEnvironmentSection || !hasStepsToReproduce || !hasExpectedBehavior) {
-                labels.push('needs-info');
+                labels.push('status: needs-info');
                 
                 await github.rest.issues.createComment({
                   owner: context.repo.owner,
@@ -79,12 +80,15 @@ jobs:
 
                   **Tip:** Using our [issue templates](.github/ISSUE_TEMPLATE) helps ensure all necessary information is included! 📝`
                 });
+              } else {
+                // Complete bug report gets ready status
+                labels.push('status: ready');
               }
             }
 
             // Check for incomplete issues
             if (body.length < 50 || title.length < 10) {
-              labels.push('needs-info');
+              labels.push('status: needs-info');
               
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
