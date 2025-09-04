@@ -3,47 +3,108 @@
   "_description": "Set enabled to false to disable auto-labeling entirely. Adjust max_labels to control how many labels can be applied automatically.",
 
   "enabled": true,
-  "max_labels": 3,
+  "max_labels": 4,
 
   "label_rules": {
     "bug": {
-      "keywords": ["bug", "error", "broken", "crash", "fail", "not working"],
-      "enabled": true
+      "keywords": [
+        "fix:",
+        "bug",
+        "error",
+        "broken",
+        "crash",
+        "fail",
+        "not working",
+        "regression"
+      ],
+      "enabled": true,
+      "priority": 1
     },
     "enhancement": {
-      "keywords": ["feature", "enhancement", "improvement", "add"],
-      "enabled": true
+      "keywords": ["feat:", "feature", "enhancement", "improvement", "add"],
+      "enabled": true,
+      "priority": 2
     },
     "security": {
-      "keywords": ["security", "vulnerability", "cve", "exploit"],
-      "enabled": true
+      "keywords": ["security", "vulnerability", "cve", "exploit", "patch"],
+      "enabled": true,
+      "priority": 1
     },
     "dependencies": {
-      "keywords": ["dependabot", "bump dependencies", "update dependencies"],
-      "enabled": true
+      "keywords": [
+        "dependabot",
+        "deps:",
+        "bump",
+        "update dependencies",
+        "upgrade"
+      ],
+      "enabled": true,
+      "priority": 2
     },
     "documentation": {
-      "keywords": ["doc", "readme", "guide", "documentation"],
-      "enabled": false
+      "keywords": ["docs:", "readme", "guide", "documentation", "example"],
+      "enabled": true,
+      "priority": 3
     },
-    "question": {
-      "keywords": ["question", "how to", "what is", "help"],
-      "enabled": false
+    "container/new": {
+      "keywords": ["new container", "add container", "initial container"],
+      "enabled": true,
+      "priority": 2
     },
-    "good first issue": {
-      "keywords": ["beginner", "newcomer", "easy", "simple", "starter"],
-      "enabled": false
+    "container/update": {
+      "keywords": [
+        "update container",
+        "upgrade container",
+        "container version"
+      ],
+      "enabled": true,
+      "priority": 2
+    },
+    "build": {
+      "keywords": [
+        "build:",
+        "ci:",
+        "dockerfile",
+        "build system",
+        "compilation"
+      ],
+      "enabled": true,
+      "priority": 3
     }
   },
 
   "priority_rules": {
     "priority-critical": {
-      "keywords": ["critical", "urgent", "severe", "blocker", "production"],
+      "keywords": [
+        "critical",
+        "urgent",
+        "severe",
+        "blocker",
+        "production down",
+        "outage"
+      ],
       "enabled": true
     },
     "priority-high": {
-      "keywords": ["high priority", "important", "breaking", "asap"],
-      "enabled": false
+      "keywords": [
+        "high priority",
+        "important",
+        "breaking change",
+        "regression"
+      ],
+      "enabled": true
     }
+  },
+
+  "exclusions": {
+    "_comment": "Prevent labeling when these patterns are found to avoid false positives",
+    "template_indicators": [
+      "brief description of what this pr does",
+      "select one primary type",
+      "only fill out if this affects containers",
+      "e.g., nginx/1.29, redis/7.2",
+      "link related issues using keywords",
+      "add any other context"
+    ]
   }
 }

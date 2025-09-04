@@ -39,42 +39,57 @@ jobs:
             const labels = [];
             const comments = [];
 
-            // Content analysis rules for automatic routing
+            // Skip if this appears to be template content
+            const templateIndicators = [
+              'container name(s):',
+              'version(s):',
+              'base image:',
+              'architecture(s):',
+              'fill in details',
+              'mark all relevant options',
+              'provide a brief description',
+              'change 1',
+              'change 2',
+              'change 3'
+            ];
+
+            const isTemplate = templateIndicators.some(indicator => 
+              body.includes(indicator.toLowerCase())
+            );
+
+            if (isTemplate) {
+              console.log('🚫 Template content detected, skipping intelligent routing to avoid false positives');
+              return;
+            }
+
+            // Content analysis rules for automatic routing (more conservative)
             const routingRules = {
-              // Container and Docker related
+              // Container and Docker related - only for specific mentions
               'container': {
-                keywords: ['docker', 'dockerfile', 'container', 'image', 'registry', 'buildx', 'buildkit'],
-                labels: ['area/containers', 'component/docker'],
+                keywords: ['dockerfile bug', 'container fails', 'docker build error', 'image issue', 'registry problem'],
+                labels: ['area/containers'],
                 team: 'containers-team',
                 message: '🐳 **Container/Docker Issue Detected**\n\nThis appears to be related to containers or Docker. The containers team has been notified.'
               },
               
-              // Security related
+              // Security related - only for actual security issues
               'security': {
-                keywords: ['security', 'vulnerability', 'cve', 'exploit', 'malicious', 'attack', 'breach', 'unauthorized'],
+                keywords: ['security vulnerability', 'cve-', 'security patch', 'exploit found', 'malicious code', 'unauthorized access'],
                 labels: ['security', 'priority-high'],
                 team: 'security-team',
                 message: '🔒 **Security Issue Detected**\n\nThis has been flagged as a security-related issue and escalated to the security team.'
               },
               
-              // Build and CI/CD
+              // Build and CI/CD - only for actual build failures
               'build': {
-                keywords: ['build', 'compile', 'ci/cd', 'pipeline', 'github actions', 'workflow', 'automation'],
-                labels: ['area/build', 'component/ci'],
+                keywords: ['build fails', 'compile error', 'ci failure', 'pipeline broken', 'workflow error'],
+                labels: ['area/build'],
                 team: 'devops-team',
                 message: '🔨 **Build/CI Issue Detected**\n\nThis appears to be related to builds or CI/CD. The DevOps team has been notified.'
-              },
-              
-              // Documentation
-              'documentation': {
-                keywords: ['documentation', 'readme', 'docs', 'guide', 'tutorial', 'example', 'instructions'],
-                labels: ['documentation', 'good first issue'],
-                team: 'docs-team',
-                message: '📚 **Documentation Issue Detected**\n\nThis appears to be documentation-related. The documentation team has been notified.'
-              },
+              }
             };
 
-            // Analyze content and apply rules
+            // Analyze content and apply rules (only one rule per issue)
             let matchedCategory = null;
             for (const [category, rule] of Object.entries(routingRules)) {
               const hasKeyword = rule.keywords.some(keyword => 
@@ -89,57 +104,33 @@ jobs:
               }
             }
 
-            // Special handling for specific patterns
-
-            // Check for version-specific issues
-            const versionMatch = body.match(/version[:\s]+([0-9]+\.[0-9]+(?:\.[0-9]+)?)/i);
-            if (versionMatch) {
-              labels.push(`version/${versionMatch[1]}`);
-              comments.push(`🏷️ **Version Detected**: This issue is related to version \`${versionMatch[1]}\``);
-            }
-
-            // Check for environment-specific issues
-            const envKeywords = {
-              'env/kubernetes': ['kubernetes', 'k8s', 'kubectl', 'helm', 'pod'],
-              'env/docker-compose': ['docker-compose', 'compose', 'docker compose'],
-              'env/production': ['production', 'prod', 'live'],
-              'env/development': ['development', 'dev', 'local']
-            };
-
-            for (const [envLabel, keywords] of Object.entries(envKeywords)) {
-              if (keywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
-                labels.push(envLabel);
-                break;
-              }
-            }
-
-            // Platform detection
+            // Platform detection - only if explicitly mentioned in context of issues
             const platformKeywords = {
-              'platform/linux': ['linux', 'ubuntu', 'debian', 'centos', 'rhel'],
-              'platform/windows': ['windows', 'win32', 'win64'],
-              'platform/macos': ['macos', 'mac os', 'darwin'],
-              'arch/arm64': ['arm64', 'aarch64', 'apple silicon', 'm1', 'm2'],
-              'arch/amd64': ['amd64', 'x86_64', 'intel']
+              'platform/linux': ['linux error', 'ubuntu issue', 'debian problem'],
+              'platform/windows': ['windows error', 'win32 issue', 'windows problem'],
+              'platform/macos': ['macos error', 'mac os issue', 'darwin problem'],
             };
 
-            for (const [platformLabel, keywords] of Object.entries(platformKeywords)) {
-              if (keywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
-                labels.push(platformLabel);
+            // Only add platform labels if there's an actual platform-specific issue
+            if (matchedCategory) {
+              for (const [platformLabel, keywords] of Object.entries(platformKeywords)) {
+                if (keywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
+                  labels.push(platformLabel);
+                  break; // Only one platform per issue
+                }
               }
             }
 
-            // Severity assessment
+            // Severity assessment - only for clear severity indicators
             const severityKeywords = {
-              'severity/critical': ['critical', 'urgent', 'production down', 'outage', 'data loss'],
-              'severity/high': ['major', 'severe', 'blocking', 'regression'],
-              'severity/medium': ['important', 'significant'],
-              'severity/low': ['minor', 'cosmetic', 'enhancement']
+              'severity/critical': ['production down', 'critical outage', 'data loss', 'system crashed'],
+              'severity/high': ['major regression', 'severe impact', 'blocking issue'],
             };
 
             for (const [severityLabel, keywords] of Object.entries(severityKeywords)) {
               if (keywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
                 labels.push(severityLabel);
-                break;
+                break; // Only one severity level
               }
             }
 
