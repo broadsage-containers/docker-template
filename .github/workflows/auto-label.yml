@@ -48,15 +48,18 @@ jobs:
               config = {
                 enabled: true,
                 max_labels: 3,
-                label_rules: {
-                  'bug': { keywords: ['fix:', 'bug', 'error', 'broken', 'crash', 'fail'], enabled: true, priority: 1 },
-                  'enhancement': { keywords: ['feat:', 'feature', 'enhancement'], enabled: true, priority: 2 },
-                  'security': { keywords: ['security', 'vulnerability', 'cve'], enabled: true, priority: 1 },
-                  'dependencies': { keywords: ['dependabot', 'bump dependencies'], enabled: true, priority: 2 }
+                type_rules: {
+                  'type: fix': { keywords: ['fix:', 'bug', 'error', 'security'], enabled: true, priority: 1 },
+                  'type: feature': { keywords: ['feat:', 'feature', 'enhancement'], enabled: true, priority: 2 },
+                  'type: docs': { keywords: ['docs:', 'documentation'], enabled: true, priority: 3 },
+                  'type: maintenance': { keywords: ['deps:', 'dependabot', 'chore:'], enabled: true, priority: 3 }
                 },
                 priority_rules: {
-                  'priority-critical': { keywords: ['critical', 'urgent', 'severe', 'blocker'], enabled: true },
-                  'priority-high': { keywords: ['high priority', 'important', 'breaking'], enabled: false }
+                  'priority: critical': { keywords: ['critical', 'security', 'vulnerability'], enabled: true },
+                  'priority: high': { keywords: ['important', 'major'], enabled: true }
+                },
+                status_rules: {
+                  'status: wip': { keywords: ['wip', 'draft'], enabled: true, pr_only: true }
                 }
               };
             }
@@ -84,45 +87,62 @@ jobs:
 
             const labels = [];
 
-            // Auto-label based on configuration with priority ordering
-            const labelCandidates = [];
-            for (const [label, rule] of Object.entries(config.label_rules || {})) {
+            // TYPE LABELS - Only one type per issue/PR
+            let typeAssigned = false;
+            const typeCandidates = [];
+            for (const [label, rule] of Object.entries(config.type_rules || {})) {
               if (rule.enabled && rule.keywords && rule.keywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
-                labelCandidates.push({ label, priority: rule.priority || 999 });
+                typeCandidates.push({ label, priority: rule.priority || 999 });
               }
             }
 
-            // Sort by priority (lower number = higher priority) and add to labels
-            labelCandidates.sort((a, b) => a.priority - b.priority);
-            labels.push(...labelCandidates.map(candidate => candidate.label));
-
-            // Additional rules for PRs
-            if (!isIssue) {
-              if (title.includes('wip') || title.includes('work in progress') || issue.draft) {
-                labels.push('work-in-progress');
-              }
-              
-              // Check if it's a dependency update
-              if (title.includes('deps:') || title.includes('bump') || title.includes('update') || 
-                  title.includes('upgrade') || body.includes('dependabot')) {
-                if (!labels.includes('dependencies')) {
-                  labels.push('dependencies');
-                }
-              }
+            // Apply highest priority type label only
+            if (typeCandidates.length > 0) {
+              typeCandidates.sort((a, b) => a.priority - b.priority);
+              labels.push(typeCandidates[0].label);
+              typeAssigned = true;
+              console.log(`🏷️ Assigned type: ${typeCandidates[0].label}`);
             }
 
-            // Priority labeling based on configuration
+            // PRIORITY LABELS - Only assign if it's critical or high
             for (const [label, rule] of Object.entries(config.priority_rules || {})) {
               if (rule.enabled && rule.keywords && rule.keywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
                 labels.push(label);
+                console.log(`⚡ Assigned priority: ${label}`);
+                break; // Only one priority label
               }
             }
 
-            // Apply labels if any were found (limit based on config)
-            const maxLabels = config.max_labels || 3;
+            // STATUS LABELS - Context-dependent
+            for (const [label, rule] of Object.entries(config.status_rules || {})) {
+              if (!rule.enabled) continue;
+              
+              // Skip PR-only rules for issues
+              if (rule.pr_only && isIssue) continue;
+              
+              // Check for WIP in PRs
+              if (label === 'status: wip' && !isIssue) {
+                if (title.toLowerCase().includes('wip') || 
+                    title.toLowerCase().includes('work in progress') || 
+                    issue.draft) {
+                  labels.push(label);
+                  console.log(`🚧 Assigned status: ${label}`);
+                  continue;
+                }
+              }
+              
+              // General keyword matching
+              if (rule.keywords && rule.keywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
+                labels.push(label);
+                console.log(`📍 Assigned status: ${label}`);
+                break; // Only one status label
+              }
+            }
+
+            // Apply labels (simplified - no complex limits)
             const uniqueLabels = [...new Set(labels)]; // Remove duplicates
 
-            if (uniqueLabels.length > 0 && uniqueLabels.length <= maxLabels) {
+            if (uniqueLabels.length > 0) {
               await github.rest.issues.addLabels({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -130,19 +150,9 @@ jobs:
                 labels: uniqueLabels
               });
               
-              console.log(`🏷️ Applied labels: ${uniqueLabels.join(', ')}`);
-            } else if (uniqueLabels.length > maxLabels) {
-              // Apply only the highest priority labels
-              const priorityLabels = uniqueLabels.slice(0, maxLabels);
-              await github.rest.issues.addLabels({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: issue.number,
-                labels: priorityLabels
-              });
-              console.log(`🏷️ Applied top priority labels (${priorityLabels.length}/${uniqueLabels.length}): ${priorityLabels.join(', ')}`);
+              console.log(`� Applied ${uniqueLabels.length} labels: ${uniqueLabels.join(', ')}`);
             } else {
-              console.log('ℹ️ No labels to apply based on content analysis');
+              console.log('ℹ️ No automatic labels assigned - manual review needed');
             }
 
       - name: Welcome first-time contributors

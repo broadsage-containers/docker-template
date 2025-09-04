@@ -31,22 +31,29 @@ jobs:
         with:
           script: |
             const labels = [
-              { name: 'stale', color: 'fef2c0', description: 'Issues or PRs that have been inactive for a while' },
-              { name: 'pinned', color: 'e1f5fe', description: 'Issues that should never be marked as stale' },
+              // TYPE LABELS - What kind of change
+              { name: 'type: fix', color: 'ff6b6b', description: 'Bug fixes, security patches, corrections' },
+              { name: 'type: feature', color: '00d4aa', description: 'New functionality, enhancements' },
+              { name: 'type: docs', color: '0075ca', description: 'Documentation only changes' },
+              { name: 'type: maintenance', color: '7f8c8d', description: 'Dependencies, refactoring, tooling' },
+              
+              // PRIORITY LABELS - How urgent
+              { name: 'priority: critical', color: 'b60205', description: 'Security vulnerabilities, breaking issues' },
+              { name: 'priority: high', color: 'ff9500', description: 'Important but not breaking' },
+              
+              // STATUS LABELS - Current state
+              { name: 'status: needs-info', color: 'f9d71c', description: 'Waiting for more information' },
+              { name: 'status: ready', color: '0e8a16', description: 'Ready for review/merge' },
+              { name: 'status: wip', color: 'fbca04', description: 'Work in progress' },
+              { name: 'status: blocked', color: 'c5def5', description: 'Blocked by external factors' },
+              
+              // SPECIAL LABELS - Keep essential ones
+              { name: 'megalinter', color: '6f42c1', description: 'Automated fixes by MegaLinter' },
               { name: 'good first issue', color: '7057ff', description: 'Good for newcomers' },
-              { name: 'help wanted', color: '008672', description: 'Extra attention is needed' },
-              { name: 'priority-high', color: 'ff6b6b', description: 'High priority issue' },
-              { name: 'priority-critical', color: 'ff1744', description: 'Critical priority issue' },
-              { name: 'work-in-progress', color: 'fbca04', description: 'Work in progress' },
-              { name: 'dependencies', color: '0366d6', description: 'Pull requests that update dependencies' },
-              { name: 'security', color: 'd73a4a', description: 'Security related issues' },
-              { name: 'enhancement', color: 'a2eeef', description: 'New feature or request' },
-              { name: 'bug', color: 'd73a4a', description: 'Something is not working' },
-              { name: 'documentation', color: '0075ca', description: 'Improvements or additions to documentation' },
               { name: 'duplicate', color: 'cfd3d7', description: 'This issue or pull request already exists' },
               { name: 'invalid', color: 'e4e669', description: 'This does not seem right' },
-              { name: 'question', color: 'd876e3', description: 'Further information is requested' },
-              { name: 'wontfix', color: 'ffffff', description: 'This will not be worked on' }
+              { name: 'wontfix', color: 'ffffff', description: 'This will not be worked on' },
+              { name: 'stale', color: 'fef2c0', description: 'Issues or PRs that have been inactive for a while' }
             ];
 
             for (const label of labels) {

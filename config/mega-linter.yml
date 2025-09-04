@@ -9,11 +9,12 @@
 # General
 PRINT_ALPACA: false
 APPLY_FIXES: all
+LOG_LEVEL: INFO # Add explicit log level
 
 DISABLE_ERRORS: false
 SHOW_ELAPSED_TIME: true
 SHOW_SKIPPED_LINTERS: false
-VALIDATE_ALL_CODEBASE: true
+VALIDATE_ALL_CODEBASE: true # Set to false for better PR performance, workflow handles this
 
 # Reporter options
 CLEAR_REPORT_FOLDER: true
