@@ -106,7 +106,7 @@ jobs:
           token: ${{ secrets.AUTOBOT_GITHUB_TOKEN }}
           commit-message: |
             style: apply linter automatic fixes
-            
+
             Signed-off-by: Broadsage AutoBot <broadsage-autobot@broadsage.com>
           title: "style: apply mega-linter automatic fixes for PR #${{ github.event.pull_request.number }}"
           labels: megalinter
