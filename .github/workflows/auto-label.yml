@@ -114,7 +114,6 @@ jobs:
             }
 
             // STATUS LABELS - Context-dependent
-            const isIssue = !!context.payload.issue;
             for (const [label, rule] of Object.entries(config.status_rules || {})) {
               if (!rule.enabled) continue;
               
