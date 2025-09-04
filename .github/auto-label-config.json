@@ -7,7 +7,16 @@
 
   "label_rules": {
     "bug": {
-      "keywords": ["fix:", "bug", "error", "broken", "crash", "fail", "not working", "regression"],
+      "keywords": [
+        "fix:",
+        "bug",
+        "error",
+        "broken",
+        "crash",
+        "fail",
+        "not working",
+        "regression"
+      ],
       "enabled": true,
       "priority": 1
     },
@@ -22,7 +31,13 @@
       "priority": 1
     },
     "dependencies": {
-      "keywords": ["dependabot", "deps:", "bump", "update dependencies", "upgrade"],
+      "keywords": [
+        "dependabot",
+        "deps:",
+        "bump",
+        "update dependencies",
+        "upgrade"
+      ],
       "enabled": true,
       "priority": 2
     },
@@ -37,12 +52,22 @@
       "priority": 2
     },
     "container/update": {
-      "keywords": ["update container", "upgrade container", "container version"],
+      "keywords": [
+        "update container",
+        "upgrade container",
+        "container version"
+      ],
       "enabled": true,
       "priority": 2
     },
     "build": {
-      "keywords": ["build:", "ci:", "dockerfile", "build system", "compilation"],
+      "keywords": [
+        "build:",
+        "ci:",
+        "dockerfile",
+        "build system",
+        "compilation"
+      ],
       "enabled": true,
       "priority": 3
     }
@@ -50,11 +75,23 @@
 
   "priority_rules": {
     "priority-critical": {
-      "keywords": ["critical", "urgent", "severe", "blocker", "production down", "outage"],
+      "keywords": [
+        "critical",
+        "urgent",
+        "severe",
+        "blocker",
+        "production down",
+        "outage"
+      ],
       "enabled": true
     },
     "priority-high": {
-      "keywords": ["high priority", "important", "breaking change", "regression"],
+      "keywords": [
+        "high priority",
+        "important",
+        "breaking change",
+        "regression"
+      ],
       "enabled": true
     }
   },

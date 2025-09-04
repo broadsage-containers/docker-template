@@ -52,11 +52,11 @@ jobs:
               'change 2',
               'change 3'
             ];
-            
+
             const isTemplate = templateIndicators.some(indicator => 
               body.includes(indicator.toLowerCase())
             );
-            
+
             if (isTemplate) {
               console.log('🚫 Template content detected, skipping intelligent routing to avoid false positives');
               return;
