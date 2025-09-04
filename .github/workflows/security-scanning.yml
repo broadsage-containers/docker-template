@@ -1,0 +1,173 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage <opensource@broadsage.com>
+# SPDX-License-Identifier: Apache-2.0
+
+---
+name: "[Security] Comprehensive Scanning Pipeline"
+
+on:
+  schedule:
+    # Run daily security scans at 2 AM UTC
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+    inputs:
+      containers_filter:
+        description: "Comma-separated list of containers to scan"
+        required: false
+        type: string
+  push:
+    paths:
+      - "library/**"
+      - ".github/workflows/security-scanning.yml"
+
+permissions:
+  contents: read
+  security-events: write
+  id-token: write
+  packages: read
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  # First discover containers to scan
+  discover-containers:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.generate-matrix.outputs.matrix }}
+      has_changes: ${{ steps.generate-matrix.outputs.has_changes }}
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate container matrix for security scanning
+        id: generate-matrix
+        env:
+          CONTAINERS_FILTER: ${{ github.event.inputs.containers_filter }}
+        run: |
+          set -euo pipefail
+
+          # Initialize containers array
+          containers=()
+
+          if [[ -n "${CONTAINERS_FILTER:-}" ]]; then
+            echo "Using container filter: ${CONTAINERS_FILTER}"
+            IFS=',' read -ra FILTER_ARRAY <<< "${CONTAINERS_FILTER}"
+            for filter in "${FILTER_ARRAY[@]}"; do
+              filter=$(echo "$filter" | xargs) # trim whitespace
+              mapfile -t found_containers < <(find library -name "Dockerfile" -type f | grep -E "library/${filter}/[^/]+/[^/]+/Dockerfile$" | sed 's|/Dockerfile||g' | sort)
+              containers+=("${found_containers[@]}")
+            done
+          else
+            echo "Discovering all containers for security scanning"
+            mapfile -t containers < <(find library -name "Dockerfile" -type f | grep -E "library/[^/]+/[^/]+/[^/]+/Dockerfile$" | sed 's|/Dockerfile||g' | sort)
+          fi
+
+          # Create matrix
+          if [[ ${#containers[@]} -gt 0 ]]; then
+            mapfile -t unique_containers < <(printf "%s\n" "${containers[@]}" | sort -u)
+            echo "Found containers to scan: ${unique_containers[*]}"
+            
+            # Generate JSON matrix
+            matrix_json="["
+            for i in "${!unique_containers[@]}"; do
+              container="${unique_containers[$i]}"
+              app_name=$(echo "${container}" | cut -d'/' -f2)
+              version=$(echo "${container}" | cut -d'/' -f3)
+              platform=$(echo "${container}" | cut -d'/' -f4)
+              
+              if [[ $i -gt 0 ]]; then
+                matrix_json+=","
+              fi
+              
+              matrix_json+="{\"container\":\"${container}\",\"app\":\"${app_name}\",\"version\":\"${version}\",\"platform\":\"${platform}\"}"
+            done
+            matrix_json+="]"
+            
+            echo "matrix=${matrix_json}" >> "$GITHUB_OUTPUT"
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No containers found to scan"
+            echo "matrix=[]" >> "$GITHUB_OUTPUT"
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  security-scan:
+    runs-on: ubuntu-latest
+    needs: discover-containers
+    if: needs.discover-containers.outputs.has_changes == 'true'
+    strategy:
+      matrix:
+        containers: ${{ fromJson(needs.discover-containers.outputs.matrix) }}
+        scanner: [trivy, syft]
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check if image exists
+        id: check-image
+        run: |
+          set -euo pipefail
+          image="${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.containers.app }}:${{ matrix.containers.version }}-${{ matrix.containers.platform }}"
+          echo "Checking if image exists: $image"
+
+          if docker manifest inspect "$image" >/dev/null 2>&1; then
+            echo "Image exists: $image"
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Image does not exist: $image"
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip scanning - image not found
+        if: steps.check-image.outputs.exists == 'false'
+        run: |
+          echo "⚠️ Skipping security scan for ${{ matrix.containers.app }}:${{ matrix.containers.version }}-${{ matrix.containers.platform }} - image not found in registry"
+          echo "This may be expected if the image hasn't been built and pushed yet."
+
+      - name: Run Trivy vulnerability scanner
+        if: matrix.scanner == 'trivy' && steps.check-image.outputs.exists == 'true'
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.containers.app }}:${{ matrix.containers.version }}-${{ matrix.containers.platform }}
+          format: "sarif"
+          output: "trivy-results.sarif"
+          severity: "CRITICAL,HIGH,MEDIUM,LOW"
+
+      - name: Generate SBOM with Syft
+        if: matrix.scanner == 'syft' && steps.check-image.outputs.exists == 'true'
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.containers.app }}:${{ matrix.containers.version }}-${{ matrix.containers.platform }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+
+      - name: Upload SARIF results
+        if: matrix.scanner != 'syft' && steps.check-image.outputs.exists == 'true'
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ${{ matrix.scanner }}-results.sarif
+          category: ${{ matrix.scanner }}-security-scan
+
+      - name: Upload SBOM as artifact
+        if: matrix.scanner == 'syft' && steps.check-image.outputs.exists == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ matrix.containers.app }}-${{ matrix.containers.version }}-${{ matrix.containers.platform }}
+          path: sbom.spdx.json

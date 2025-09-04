@@ -149,7 +149,7 @@ jobs:
           base_sha=$(git merge-base origin/main HEAD)
 
           # Get changed files between base and current commit
-          changed_files=$(git diff --name-only "$base_sha" HEAD | grep -E '^broadsage/' | grep -v -E '\.(md|txt)$|LICENSE$|\.github/' || true)
+          changed_files=$(git diff --name-only "$base_sha" HEAD | grep -E '^library/' | grep -v -E '\.(md|txt)$|LICENSE$|\.github/' || true)
 
           echo "Changed files:"
           echo "$changed_files"
@@ -178,8 +178,8 @@ jobs:
 
           # Process changed files
           while IFS= read -r file; do
-            if [[ -n "$file" && "$file" =~ ^broadsage/([^/]+)/([^/]+)/([^/]+)/ ]]; then
-              container_path="broadsage/${BASH_REMATCH[1]}/${BASH_REMATCH[2]}/${BASH_REMATCH[3]}"
+            if [[ -n "$file" && "$file" =~ ^library/([^/]+)/([^/]+)/([^/]+)/ ]]; then
+              container_path="library/${BASH_REMATCH[1]}/${BASH_REMATCH[2]}/${BASH_REMATCH[3]}"
               if [[ -f "$container_path/Dockerfile" ]]; then
                 containers+=("$container_path")
               fi
