@@ -1,0 +1,33 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage <opensource@broadsage.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+---
+name: Conform DCO (--Sign-off)
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  signoff:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden GitHub runner
+        uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 #v2.13.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 #v4.3.0
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup main branch without switching current branch
+        run: git fetch origin main:main
+
+      - name: Conform Action
+        uses: siderolabs/conform@a316d3d13e82ac5f8d2eae42a734f8a885cddb15 # v0.1.0-alpha.29
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
