@@ -1,0 +1,24 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage <opensource@broadsage.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+---
+name: '[Support] Close Solved issues'
+on:
+  schedule:
+    # Hourly
+    - cron: '0 * * * *'
+# Remove all permissions by default. Actions are performed by Broadsage AutoBot
+permissions: {}
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    if: ${{ github.repository_owner == 'bitnami' }}
+    steps:
+      - uses: actions/stale@5bef64f19d7facfb25b37b414482c7164d639639
+        with:
+          any-of-labels: 'solved'
+          stale-issue-label: 'solved'
+          days-before-stale: 0
+          days-before-close: 0
+          repo-token: ${{ secrets.AUTOBOT_GITHUB_TOKEN }}
