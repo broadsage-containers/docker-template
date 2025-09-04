@@ -28,11 +28,11 @@ jobs:
     runs-on: ubuntu-latest
     # Job-level permissions - only what's actually needed
     permissions:
-      contents: write        # Write access for creating branches and PRs for auto-fixes
-      issues: write          # Write access to post issue comments
-      pull-requests: write   # Write access to post PR comments and create PRs
-      statuses: write        # Write access to update commit status
-      security-events: write # Write access to upload SARIF files
+      contents: write # Required: peter-evans/create-pull-request to create branches/commits
+      pull-requests: write # Required: peter-evans/create-pull-request + GITHUB_COMMENT_REPORTER
+      statuses: write # Required: GITHUB_STATUS_REPORTER in MegaLinter config
+      security-events: write # Required: SARIF_REPORTER in MegaLinter config
+      actions: read # Required: ACTION_ACTIONLINT to read workflow files
     steps:
       # Git Checkout
       - name: Harden the runner (Audit all outbound calls)
@@ -84,11 +84,11 @@ jobs:
           labels: bot
           body: |
             This PR contains automatic fixes applied by MegaLinter for PR #${{ github.event.pull_request.number }}.
-            
+
             **Changes:**
             - Automatic code formatting fixes
             - Linter compliance fixes
-            
+
             Please review and merge if the changes are acceptable.
       - name: Create PR output
         if: steps.ml.outputs.has_updated_sources == 1 && (env.APPLY_FIXES_EVENT == 'all' || env.APPLY_FIXES_EVENT == github.event_name) && env.APPLY_FIXES_MODE == 'pull_request' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
