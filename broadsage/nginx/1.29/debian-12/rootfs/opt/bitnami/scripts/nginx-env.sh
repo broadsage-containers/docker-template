@@ -1,7 +1,9 @@
 #!/bin/bash
-# Copyright Broadcom, Inc. All Rights Reserved.
-# SPDX-License-Identifier: APACHE-2.0
+
+# SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage <opensource@broadsage.com>
 #
+# SPDX-License-Identifier: Apache-2.0
+
 # Environment configuration for nginx
 
 # The values for all environment variables will be set in the below order of precedence

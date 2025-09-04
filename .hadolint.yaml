@@ -1,6 +1,12 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage <opensource@broadsage.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 # Container Security and Quality Configuration
 
 # Hadolint configuration for Dockerfile linting
+
+---
 ignored:
   - DL3008 # Allow apt-get install without specific versions in base images
   - DL3009 # Allow keeping apt lists for debugging in development images

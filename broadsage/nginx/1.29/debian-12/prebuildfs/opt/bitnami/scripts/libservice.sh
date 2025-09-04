@@ -1,7 +1,9 @@
 #!/bin/bash
-# Copyright Broadcom, Inc. All Rights Reserved.
-# SPDX-License-Identifier: APACHE-2.0
+
+# SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage <opensource@broadsage.com>
 #
+# SPDX-License-Identifier: Apache-2.0
+
 # Library for managing services
 
 # shellcheck disable=SC1091
@@ -133,7 +135,7 @@ generate_cron_conf() {
   if "$clean"; then
     cat >"/etc/cron.d/${service_name}" <<EOF
 # Copyright Broadcom, Inc. All Rights Reserved.
-# SPDX-License-Identifier: APACHE-2.0
+# SPDX-License-Identifier: Apache-2.0
 
 ${schedule} ${run_as} ${cmd}
 EOF
@@ -194,7 +196,7 @@ generate_monit_conf() {
   mkdir -p "$monit_conf_dir"
   cat >"${monit_conf_dir}/${service_name}.conf${conf_suffix:-}" <<EOF
 # Copyright Broadcom, Inc. All Rights Reserved.
-# SPDX-License-Identifier: APACHE-2.0
+# SPDX-License-Identifier: Apache-2.0
 
 check process ${service_name}
   with pidfile "${pid_file}"
@@ -256,7 +258,7 @@ generate_logrotate_conf() {
   mkdir -p "$logrotate_conf_dir"
   cat <<EOF | sed '/^\s*$/d' >"${logrotate_conf_dir}/${service_name}"
 # Copyright Broadcom, Inc. All Rights Reserved.
-# SPDX-License-Identifier: APACHE-2.0
+# SPDX-License-Identifier: Apache-2.0
 
 ${log_path} {
   ${period}
@@ -403,7 +405,7 @@ generate_systemd_conf() {
   # Generate the Systemd unit
   cat >"$service_file" <<EOF
 # Copyright Broadcom, Inc. All Rights Reserved.
-# SPDX-License-Identifier: APACHE-2.0
+# SPDX-License-Identifier: Apache-2.0
 
 [Unit]
 Description=Bitnami service for ${name}
