@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage <opensource@broadsage.com>
+
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Pull Request Templates Guide
 
 Choose the appropriate template to ensure your contribution is reviewed efficiently.

@@ -6,7 +6,7 @@ version = 1
 
 # configurations
 [[annotations]]
-path = [".github/pull_request_template.md",".markdownlint.json"]
+path = [".github/pull_request_template.md",".markdownlint.json",".github/auto-label-config.json","broadsage/nginx/1.29/debian-12/prebuildfs/opt/bitnami/.bitnami_components.json"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "Copyright (c) 2025 Broadsage <opensource@broadsage.com>"
 SPDX-License-Identifier = "Apache-2.0"
@@ -14,6 +14,16 @@ SPDX-License-Identifier = "Apache-2.0"
 # images etc
 [[annotations]]
 path = ["assets/*.png"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "Copyright (c) 2025 Broadsage <opensource@broadsage.com>"
+SPDX-License-Identifier = "Apache-2.0"
+
+# bitnami files and templates
+[[annotations]]
+path = [
+  "broadsage/nginx/1.29/debian-12/prebuildfs/opt/bitnami/licenses/licenses.txt",
+  "broadsage/nginx/1.29/debian-12/rootfs/opt/bitnami/scripts/nginx/bitnami-templates/*.tpl"
+]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "Copyright (c) 2025 Broadsage <opensource@broadsage.com>"
 SPDX-License-Identifier = "Apache-2.0"
