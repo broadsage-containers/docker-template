@@ -14,6 +14,7 @@ env: # Comment env block if you don't want to apply fixes
   APPLY_FIXES_EVENT: pull_request # Triggers application of fixes only on pull requests
   APPLY_FIXES_MODE: pull_request # Fixes are posted in a separate PR for review
   MEGALINTER_CONFIG: /config/mega-linter.yml
+  MEGALINTER_FLAVOR: cupcake # Move to env for easier management
 
 concurrency:
   group: ${{ github.ref }}-${{ github.workflow }}
@@ -44,12 +45,12 @@ jobs:
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0 # If you use VALIDATE_ALL_CODEBASE = true, you can remove this line to improve performances
+          fetch-depth: 0 # Required for VALIDATE_ALL_CODEBASE and proper git diff analysis
 
-      # MegaLinter
+      # MegaLinter - Flavor controlled by MEGALINTER_FLAVOR env var
       - name: MegaLinter
         id: ml
-        # You can override MegaLinter flavor used to have faster performances
+        # Using base action with MEGALINTER_FLAVOR env var for flexibility
         # More info at https://megalinter.io/flavors/
         uses: oxsecurity/megalinter@e08c2b05e3dbc40af4c23f41172ef1e068a7d651 # v8.8.0
         env:
@@ -70,6 +71,19 @@ jobs:
             megalinter-reports
             mega-linter.log
 
+      # Show MegaLinter summary
+      - name: MegaLinter Summary
+        if: success() || failure()
+        run: |
+          echo "## 📊 MegaLinter Results Summary"
+          echo "- **Status**: ${{ job.status }}"
+          echo "- **Has Updated Sources**: ${{ steps.ml.outputs.has_updated_sources }}"
+          if [ "${{ steps.ml.outputs.has_updated_sources }}" == "1" ]; then
+            echo "- **Auto-fix PR**: Will be created"
+          else
+            echo "- **Auto-fix PR**: Not needed - no fixable issues found"
+          fi
+
       # Create pull request if applicable (for now works only on PR from same repository, not from forks)
       - name: Create Pull Request with applied fixes
         id: cpr
@@ -79,9 +93,9 @@ jobs:
           base: ${{ github.event.pull_request.base.ref }}
           branch: megalinter-fixes-${{ github.event.pull_request.number }}
           token: ${{ secrets.AUTOBOT_GITHUB_TOKEN }}
-          commit-message: "[MegaLinter] Apply linters automatic fixes"
-          title: "[MegaLinter] Apply linters automatic fixes for PR #${{ github.event.pull_request.number }}"
-          labels: bot
+          commit-message: "style: apply linter automatic fixes"
+          title: "style: apply mega-linter automatic fixes for PR #${{ github.event.pull_request.number }}"
+          labels: megalinter
           body: |
             This PR contains automatic fixes applied by MegaLinter for PR #${{ github.event.pull_request.number }}.
             
@@ -89,7 +103,63 @@ jobs:
             - Automatic code formatting fixes
             - Linter compliance fixes
             
-            Please review and merge if the changes are acceptable.
+            **Next Steps:**
+            📋 **Please apply these fixes to your original PR**
+            1. Merge this branch into your original PR branch
+            2. Close this MegaLinter PR
+            3. Continue with your original PR review process
+            
+            ⚠️ **Important**: Do not merge this PR directly - apply the fixes to your original PR instead.
+      - name: Comment on original PR
+        if: steps.cpr.outputs.pull-request-number && github.event_name == 'pull_request'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        continue-on-error: true # Don't fail the workflow if commenting fails
+        with:
+          github-token: ${{ secrets.AUTOBOT_GITHUB_TOKEN }}
+          script: |
+            try {
+              const fixPrUrl = "${{ steps.cpr.outputs.pull-request-url }}";
+              const fixPrNumber = "${{ steps.cpr.outputs.pull-request-number }}";
+              const originalPrNumber = context.payload.pull_request.number;
+              
+              const comment = `## 🤖 MegaLinter Auto-Fix Available
+              
+              Hi @${{ github.event.pull_request.user.login }}! 👋
+              
+              MegaLinter found some linting issues in your PR and has created an auto-fix PR: **#${fixPrNumber}**
+              
+              ### 📋 Required Action:
+              **Please merge the fixes into your original PR:**
+              \`\`\`bash
+              # Fetch and merge the linter fixes
+              git fetch origin megalinter-fixes-${originalPrNumber}
+              git checkout ${{ github.event.pull_request.head.ref }}
+              git merge origin/megalinter-fixes-${originalPrNumber}
+              git push origin ${{ github.event.pull_request.head.ref }}
+              \`\`\`
+              
+              After merging the fixes, please close the auto-fix PR #${fixPrNumber}.
+              
+              ### 🔗 Links:
+              - **Auto-fix PR**: ${fixPrUrl}
+              - **MegaLinter Report**: [View artifacts](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+              
+              ---
+              *This comment was automatically generated by MegaLinter*`;
+              
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: originalPrNumber,
+                body: comment
+              });
+              
+              console.log(`✅ Successfully commented on PR #${originalPrNumber}`);
+            } catch (error) {
+              console.log(`❌ Failed to comment on PR: ${error.message}`);
+              core.setFailed(`Failed to comment on original PR: ${error.message}`);
+            }
+
       - name: Create PR output
         if: steps.ml.outputs.has_updated_sources == 1 && (env.APPLY_FIXES_EVENT == 'all' || env.APPLY_FIXES_EVENT == github.event_name) && env.APPLY_FIXES_MODE == 'pull_request' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
         run: |

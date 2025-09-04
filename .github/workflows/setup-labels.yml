@@ -48,6 +48,7 @@ jobs:
               { name: 'status: blocked', color: 'c5def5', description: 'Blocked by external factors' },
               
               // SPECIAL LABELS - Keep essential ones
+              { name: 'megalinter', color: '6f42c1', description: 'Automated fixes by MegaLinter' },
               { name: 'good first issue', color: '7057ff', description: 'Good for newcomers' },
               { name: 'duplicate', color: 'cfd3d7', description: 'This issue or pull request already exists' },
               { name: 'invalid', color: 'e4e669', description: 'This does not seem right' },
