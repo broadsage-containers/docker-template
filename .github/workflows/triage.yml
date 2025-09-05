@@ -87,13 +87,31 @@ jobs:
             - \`chore\`: Maintenance tasks
             - \`ci\`: CI/CD changes
             - \`build\`: Build system changes
+            - \`revert\`: Revert changes
+
+            ### 🎯 Common Scopes (optional):
+            - \`api\`: API changes, endpoints
+            - \`auth\`: Authentication, authorization
+            - \`build\`: Build system, compilation
+            - \`ci\`: CI/CD workflows
+            - \`config\`: Configuration files
+            - \`container\`: Container-related changes
+            - \`deps\`: Dependencies, packages
+            - \`docker\`: Docker-specific changes
+            - \`docs\`: Documentation
+            - \`nginx\`: Nginx-specific changes
+            - \`scripts\`: Build/automation scripts
+            - \`security\`: Security-related changes
+            - \`test\`: Testing code
+            - \`workflow\`: GitHub Actions workflows
 
             ### 📝 Examples:
             - \`feat: add nginx 1.29 support\`
             - \`fix(docker): resolve build issue\`  
-            - \`docs: update README\`
-            - \`refactor(workflow): consolidate actions\`
-            - \`feat!: breaking API change\`
+            - \`feat(api): add container registry endpoint\`
+            - \`chore(deps): bump nginx to 1.29.1\`
+            - \`fix(security): patch CVE-2024-1234\`
+            - \`feat(auth)!: breaking authentication changes\`
 
             ### 🔧 Please update your PR title to match this format.
 
@@ -156,6 +174,9 @@ jobs:
         with:
           egress-policy: audit
 
+      - name: Checkout repository
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+
       - name: Auto-label based on content
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         if: github.actor != 'dependabot[bot]'
@@ -163,133 +184,163 @@ jobs:
         with:
           github-token: ${{ secrets.AUTOBOT_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            // Load auto-label configuration
+            const configPath = path.join(process.env.GITHUB_WORKSPACE, '.github', 'auto-label-config.json');
+            let config;
+
+            try {
+              const configContent = fs.readFileSync(configPath, 'utf8');
+              config = JSON.parse(configContent);
+              console.log('📄 Loaded auto-label configuration from auto-label-config.json');
+              console.log(`📊 Config version: ${config._version || 'unknown'}`);
+            } catch (error) {
+              console.log(`❌ Error loading config file: ${error.message}`);
+              console.log('🔄 Falling back to basic conventional commits logic');
+              
+              // Fallback to basic conventional commits logic
+              config = {
+                enabled: true,
+                max_labels: 3,
+                conventional_commits: {
+                  'feat': { label: 'type: feature', priority: 1 },
+                  'fix': { label: 'type: fix', priority: 1 },
+                  'docs': { label: 'type: docs', priority: 2 },
+                  'chore': { label: 'type: chore', priority: 3 }
+                },
+                breaking_changes: {
+                  label: 'breaking-change',
+                  patterns: ['!:', 'BREAKING CHANGE:', 'BREAKING-CHANGE:'],
+                  priority: 1
+                },
+                scopes: {
+                  'docker': { label: 'scope: docker', priority: 2 },
+                  'container': { label: 'scope: container', priority: 2 },
+                  'security': { label: 'scope: security', priority: 1 }
+                }
+              };
+            }
+
+            // Check if auto-labeling is enabled
+            if (!config.enabled) {
+              console.log('⏸️ Auto-labeling is disabled in configuration');
+              return;
+            }
+
             const issue = context.payload.issue || context.payload.pull_request;
             const isIssue = !!context.payload.issue;
-            const title = issue.title.toLowerCase();
-            const body = (issue.body || '').toLowerCase();
+            const title = issue.title;
+            const body = issue.body || '';
             const labels = [];
+            const maxLabels = config.max_labels || 3;
 
-            console.log(`🔍 Analyzing ${isIssue ? 'issue' : 'PR'}: "${issue.title}"`);
+            console.log(`🔍 Analyzing ${isIssue ? 'issue' : 'PR'}: "${title}"`);
 
-            // Fallback labeling function definition (must be defined before use)
-            const applyFallbackLabeling = () => {
-              console.log('🔄 Applying fallback keyword-based labeling');
-              
-              const fallbackKeywords = {
-                'type: bug': ['bug fix', 'fix bug', 'fixes bug', 'hotfix'],
-                'type: feature': ['new feature', 'add feature', 'implement'],
-                'type: maintenance': ['refactor', 'cleanup', 'update', 'upgrade', 'bump'],
-                'type: docs': ['update docs', 'fix docs', 'documentation'],
-                'area/containers': ['docker', 'container', 'dockerfile'],
-                'area/build': ['workflow', 'ci', 'build', 'pipeline']
-              };
-
-              let fallbackApplied = 0;
-              for (const [label, keywords] of Object.entries(fallbackKeywords)) {
-                if (fallbackApplied < 2 && keywords.some(keyword => title.includes(keyword))) {
-                  labels.push(label);
-                  console.log(`🏷️ Applied fallback label: "${label}"`);
-                  fallbackApplied++;
-                }
-              }
-            };
-
-            // Conventional Commit based labeling (primary method for PRs)
+            // Enhanced conventional commit detection for PRs
             if (!isIssue) {
-              const conventionalCommitPattern = /^(feat|fix|docs|style|refactor|perf|test|chore|ci|build|revert)(\(.+\))?!?:\s/;
-              const match = issue.title.match(conventionalCommitPattern);
+              const conventionalCommitPattern = /^(feat|fix|docs|style|refactor|perf|test|chore|ci|build|revert)(\(([^)]+)\))?(!)?:\s*(.+)/;
+              const match = title.match(conventionalCommitPattern);
               
               if (match) {
-                const commitType = match[1];
-                const scope = match[2] ? match[2].slice(1, -1) : null; // Remove parentheses
+                const [, commitType, , scope, breakingChange, description] = match;
                 
-                console.log(`✅ Detected conventional commit type: "${commitType}"${scope ? ` with scope: "${scope}"` : ''}`);
+                console.log(`✅ Detected conventional commit - Type: "${commitType}"${scope ? `, Scope: "${scope}"` : ''}${breakingChange ? ', Breaking: true' : ''}`);
                 
-                // Map conventional commit types to labels
-                const conventionalToLabels = {
-                  'feat': 'type: feature',
-                  'fix': 'type: bug', 
-                  'docs': 'type: docs',
-                  'style': 'type: maintenance',
-                  'refactor': 'type: maintenance',
-                  'perf': 'performance',
-                  'test': 'type: maintenance',
-                  'chore': 'type: maintenance', 
-                  'ci': 'area/build',
-                  'build': 'area/build',
-                  'revert': 'type: maintenance'
-                };
-
-                if (conventionalToLabels[commitType]) {
-                  labels.push(conventionalToLabels[commitType]);
-                  console.log(`🏷️ Applied conventional commit label: "${conventionalToLabels[commitType]}"`);
+                // Apply type label using new configuration format
+                if (config.conventional_commits && config.conventional_commits[commitType]) {
+                  const typeConfig = config.conventional_commits[commitType];
+                  labels.push(typeConfig.label);
+                  console.log(`🏷️ Applied type label: "${typeConfig.label}"`);
                 }
-
-                // Handle scopes for area labels
-                if (scope) {
-                  const scopeToAreaLabels = {
-                    'docker': 'area/containers',
-                    'container': 'area/containers', 
-                    'containers': 'area/containers',
-                    'dockerfile': 'area/containers',
-                    'workflow': 'area/build',
-                    'workflows': 'area/build',
-                    'ci': 'area/build',
-                    'build': 'area/build',
-                    'docs': 'type: docs',
-                    'security': 'security'
-                  };
-
-                  if (scopeToAreaLabels[scope.toLowerCase()]) {
-                    const scopeLabel = scopeToAreaLabels[scope.toLowerCase()];
-                    if (!labels.includes(scopeLabel)) {
-                      labels.push(scopeLabel);
-                      console.log(`🎯 Applied scope-based label: "${scopeLabel}"`);
-                    }
+                
+                // Apply scope label if scope is present
+                if (scope && config.scopes && config.scopes[scope.toLowerCase()]) {
+                  const scopeConfig = config.scopes[scope.toLowerCase()];
+                  labels.push(scopeConfig.label);
+                  console.log(`🎯 Applied scope label: "${scopeConfig.label}" for scope "${scope}"`);
+                }
+                
+                // Check for breaking changes
+                if (breakingChange || 
+                    config.breaking_changes?.patterns?.some(pattern => 
+                      title.includes(pattern) || body.includes(pattern))) {
+                  if (config.breaking_changes?.label) {
+                    labels.push(config.breaking_changes.label);
+                    console.log(`⚠️ Applied breaking change label: "${config.breaking_changes.label}"`);
                   }
                 }
-
-                // Check for breaking change indicator (!)
-                if (issue.title.includes('!:')) {
-                  labels.push('breaking-change');
-                  console.log('⚠️ Applied breaking-change label');
-                }
-
               } else {
                 console.log('⚠️ PR title does not follow conventional commit format');
-                // Fallback to keyword-based labeling for non-conventional titles
-                applyFallbackLabeling();
+                console.log('💡 Expected format: type(scope): description or type: description');
               }
-            }
-
-            // For issues, use keyword-based labeling (much more conservative)
-            if (isIssue) {
-              const issueKeywords = {
-                'type: bug': ['bug report', 'error occurred', 'issue with', 'problem with'],
-                'type: feature': ['feature request', 'enhancement request', 'new feature'],
-                'type: docs': ['documentation issue', 'docs update', 'readme issue'],
-                'question': ['question about', 'how to', 'help with']
-              };
-
-              for (const [label, keywords] of Object.entries(issueKeywords)) {
-                if (keywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
-                  labels.push(label);
-                  console.log(`🏷️ Applied issue label: "${label}"`);
-                  break; // Only one type label for issues
+            } else {
+              // For issues, we can still try to detect conventional commit patterns or use basic keyword matching
+              console.log('📝 Issue detected - applying basic content analysis');
+              
+              const titleLower = title.toLowerCase();
+              const bodyLower = body.toLowerCase();
+              
+              // Basic keyword detection for issues
+              if (titleLower.includes('bug') || titleLower.includes('fix') || titleLower.includes('error')) {
+                if (config.conventional_commits?.fix) {
+                  labels.push(config.conventional_commits.fix.label);
+                  console.log('🐛 Applied fix label for issue containing bug-related keywords');
+                }
+              } else if (titleLower.includes('feature') || titleLower.includes('enhancement')) {
+                if (config.conventional_commits?.feat) {
+                  labels.push(config.conventional_commits.feat.label);
+                  console.log('✨ Applied feature label for issue containing feature-related keywords');
+                }
+              } else if (titleLower.includes('documentation') || titleLower.includes('docs')) {
+                if (config.conventional_commits?.docs) {
+                  labels.push(config.conventional_commits.docs.label);
+                  console.log('📚 Applied docs label for issue containing documentation-related keywords');
+                }
+              }
+              
+              // Check for security-related content
+              if (titleLower.includes('security') || titleLower.includes('vulnerability') || 
+                  bodyLower.includes('security') || bodyLower.includes('cve')) {
+                if (config.scopes?.security) {
+                  labels.push(config.scopes.security.label);
+                  console.log('🔒 Applied security scope label');
                 }
               }
             }
 
-            console.log(`📋 Final labels to apply: [${labels.join(', ')}]`);
+            // Remove duplicates and sort by priority
+            const uniqueLabels = [...new Set(labels)];
 
-            // Apply labels with safety limit
-            const maxLabels = 3;
-            const finalLabels = labels.slice(0, maxLabels);
+            // Sort labels by priority if we have the config structure
+            const sortedLabels = uniqueLabels.sort((a, b) => {
+              let priorityA = 999, priorityB = 999;
+              
+              // Find priority from config
+              for (const [type, typeConfig] of Object.entries(config.conventional_commits || {})) {
+                if (typeConfig.label === a) priorityA = typeConfig.priority || 999;
+                if (typeConfig.label === b) priorityB = typeConfig.priority || 999;
+              }
+              for (const [scope, scopeConfig] of Object.entries(config.scopes || {})) {
+                if (scopeConfig.label === a) priorityA = scopeConfig.priority || 999;
+                if (scopeConfig.label === b) priorityB = scopeConfig.priority || 999;
+              }
+              if (config.breaking_changes?.label === a) priorityA = config.breaking_changes.priority || 1;
+              if (config.breaking_changes?.label === b) priorityB = config.breaking_changes.priority || 1;
+              
+              return priorityA - priorityB;
+            });
 
-            if (labels.length > maxLabels) {
-              console.log(`⚠️ Truncated ${labels.length - maxLabels} labels due to safety limit`);
+            const finalLabels = sortedLabels.slice(0, maxLabels);
+
+            console.log(`📋 Final labels to apply: [${finalLabels.join(', ')}]`);
+
+            if (uniqueLabels.length > maxLabels) {
+              console.log(`⚠️ Truncated ${uniqueLabels.length - maxLabels} labels due to safety limit (max: ${maxLabels})`);
             }
 
+            // Apply labels to the issue/PR
             if (finalLabels.length > 0) {
               try {
                 await github.rest.issues.addLabels({
@@ -301,69 +352,25 @@ jobs:
                 console.log(`✅ Successfully applied ${finalLabels.length} labels: [${finalLabels.join(', ')}]`);
               } catch (error) {
                 console.log(`❌ Error applying labels: ${error.message}`);
+                console.log('🔍 Some labels might not exist in the repository yet');
+                
+                // Try to apply labels one by one to see which ones fail
+                for (const label of finalLabels) {
+                  try {
+                    await github.rest.issues.addLabels({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      issue_number: issue.number,
+                      labels: [label]
+                    });
+                    console.log(`✅ Applied label: "${label}"`);
+                  } catch (singleError) {
+                    console.log(`❌ Failed to apply label "${label}": ${singleError.message}`);
+                  }
+                }
               }
             } else {
-              console.log('ℹ️ No labels to apply');
-            }
-
-            // Priority detection (very conservative - only for explicit urgent/critical)
-            if (['urgent', 'critical priority'].some(phrase => title.includes(phrase) || body.includes(phrase))) {
-              if (!labels.includes('priority-high')) {
-                labels.push('priority-high');
-                console.log('🚨 Applied high priority label');
-              }
-            }
-
-            // Special handling for PRs - check for additional contextual labels
-            if (!isIssue) {
-              try {
-                const { data: files } = await github.rest.pulls.listFiles({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  pull_number: issue.number
-                });
-
-                const totalChanges = files.reduce((sum, file) => sum + file.additions + file.deletions, 0);
-
-                // Large PR detection (conservative threshold)
-                if (totalChanges > 800) { // Increased threshold to be less aggressive
-                  labels.push('large-pr');
-                  console.log(`📏 Applied large-pr label for ${totalChanges} line changes`);
-                }
-
-                // Missing tests detection (only for clear code changes)
-                const hasCodeChanges = files.some(file => 
-                  file.filename.match(/\.(js|ts|py|go|java|cpp|c|rs|php)$/));
-                const hasTestChanges = files.some(file => 
-                  file.filename.includes('test') || file.filename.includes('spec'));
-
-                if (hasCodeChanges && !hasTestChanges && 
-                    !title.includes('docs') && !title.includes('refactor') && 
-                    totalChanges > 100) { // Only for substantial code changes
-                  labels.push('needs-tests');
-                  console.log('🧪 Applied needs-tests label for code changes without tests');
-                }
-              } catch (error) {
-                console.log('Could not analyze PR files:', error.message);
-              }
-            }
-
-            // Final safety check - limit total auto-applied labels to 3
-            if (labels.length > 3) {
-              console.log(`⚠️ Too many labels (${labels.length}), keeping only first 3`);
-              labels.splice(3);
-            }
-
-            if (labels.length > 0) {
-              console.log(`🏷️ Applying ${labels.length} labels:`, labels.join(', '));
-              await github.rest.issues.addLabels({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: issue.number,
-                labels: labels
-              });
-            } else {
-              console.log('ℹ️ No auto-labels applied - PR did not match specific criteria');
+              console.log('ℹ️ No labels to apply based on configuration rules');
             }
 
   # Intelligent routing

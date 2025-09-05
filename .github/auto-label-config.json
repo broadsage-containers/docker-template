@@ -1,121 +1,131 @@
 {
-  "_comment": "Simplified auto-labeling configuration - 3-category system",
-  "_description": "Focus on TYPE, PRIORITY, and STATUS labels only. Much simpler decision tree.",
+  "_comment": "Simplified auto-labeling configuration based on Conventional Commits",
+  "_description": "Clean labeling system using only conventional commit patterns",
+  "_version": "3.0",
 
   "enabled": true,
   "max_labels": 3,
 
-  "type_rules": {
-    "type: fix": {
-      "keywords": [
-        "fix:",
-        "bug",
-        "error",
-        "broken",
-        "crash",
-        "fail",
-        "not working",
-        "regression",
-        "security",
-        "vulnerability",
-        "patch"
-      ],
-      "enabled": true,
+  "conventional_commits": {
+    "feat": {
+      "label": "type: feature",
+      "pattern": "^feat(\\(.+\\))?(!)?:",
       "priority": 1
     },
-    "type: feature": {
-      "keywords": [
-        "feat:",
-        "feature",
-        "enhancement",
-        "improvement",
-        "add",
-        "new"
-      ],
-      "enabled": true,
+    "fix": {
+      "label": "type: fix",
+      "pattern": "^fix(\\(.+\\))?(!)?:",
+      "priority": 1
+    },
+    "docs": {
+      "label": "type: docs",
+      "pattern": "^docs(\\(.+\\))?(!)?:",
       "priority": 2
     },
-    "type: docs": {
-      "keywords": [
-        "docs:",
-        "readme",
-        "guide",
-        "documentation",
-        "example",
-        "comment"
-      ],
-      "enabled": true,
+    "style": {
+      "label": "type: style",
+      "pattern": "^style(\\(.+\\))?(!)?:",
       "priority": 3
     },
-    "type: maintenance": {
-      "keywords": [
-        "deps:",
-        "bump",
-        "update dependencies",
-        "upgrade",
-        "dependabot",
-        "refactor",
-        "cleanup",
-        "chore:",
-        "ci:",
-        "test:",
-        "version",
-        "container update",
-        "base image"
-      ],
-      "enabled": true,
+    "refactor": {
+      "label": "type: refactor",
+      "pattern": "^refactor(\\(.+\\))?(!)?:",
+      "priority": 2
+    },
+    "perf": {
+      "label": "type: performance",
+      "pattern": "^perf(\\(.+\\))?(!)?:",
+      "priority": 2
+    },
+    "test": {
+      "label": "type: test",
+      "pattern": "^test(\\(.+\\))?(!)?:",
       "priority": 3
+    },
+    "chore": {
+      "label": "type: chore",
+      "pattern": "^chore(\\(.+\\))?(!)?:",
+      "priority": 3
+    },
+    "ci": {
+      "label": "type: ci",
+      "pattern": "^ci(\\(.+\\))?(!)?:",
+      "priority": 3
+    },
+    "build": {
+      "label": "type: build",
+      "pattern": "^build(\\(.+\\))?(!)?:",
+      "priority": 3
+    },
+    "revert": {
+      "label": "type: revert",
+      "pattern": "^revert(\\(.+\\))?(!)?:",
+      "priority": 1
     }
   },
 
-  "priority_rules": {
-    "priority: critical": {
-      "keywords": [
-        "critical",
-        "urgent",
-        "severe",
-        "blocker",
-        "security",
-        "vulnerability",
-        "cve",
-        "breaking",
-        "production down"
-      ],
-      "enabled": true,
+  "breaking_changes": {
+    "label": "breaking-change",
+    "patterns": ["!:", "BREAKING CHANGE:", "BREAKING-CHANGE:"],
+    "priority": 1
+  },
+
+  "scopes": {
+    "api": {
+      "label": "scope: api",
+      "priority": 2
+    },
+    "auth": {
+      "label": "scope: auth",
       "priority": 1
     },
-    "priority: high": {
-      "keywords": ["high priority", "important", "major"],
-      "enabled": true,
+    "build": {
+      "label": "scope: build",
+      "priority": 2
+    },
+    "ci": {
+      "label": "scope: ci",
+      "priority": 2
+    },
+    "config": {
+      "label": "scope: config",
+      "priority": 2
+    },
+    "container": {
+      "label": "scope: container",
+      "priority": 2
+    },
+    "deps": {
+      "label": "scope: deps",
+      "priority": 3
+    },
+    "docker": {
+      "label": "scope: docker",
+      "priority": 2
+    },
+    "docs": {
+      "label": "scope: docs",
+      "priority": 3
+    },
+    "nginx": {
+      "label": "scope: nginx",
+      "priority": 2
+    },
+    "scripts": {
+      "label": "scope: scripts",
+      "priority": 2
+    },
+    "security": {
+      "label": "scope: security",
+      "priority": 1
+    },
+    "test": {
+      "label": "scope: test",
+      "priority": 3
+    },
+    "workflow": {
+      "label": "scope: workflow",
       "priority": 2
     }
-  },
-
-  "status_rules": {
-    "status: wip": {
-      "keywords": ["wip", "work in progress", "draft"],
-      "enabled": true,
-      "pr_only": true
-    },
-    "status: needs-info": {
-      "keywords": [
-        "need info",
-        "needs information",
-        "incomplete",
-        "clarification"
-      ],
-      "enabled": true,
-      "priority": 1
-    }
-  },
-
-  "exclusions": {
-    "template_indicators": [
-      "<!-- Please fill out",
-      "Replace this text",
-      "[Enter description here]",
-      "**Steps to reproduce:**",
-      "**Expected behavior:**"
-    ]
   }
 }
