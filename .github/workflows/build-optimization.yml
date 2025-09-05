@@ -134,6 +134,21 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
 
+      - name: Docker Pre-flight Check
+        run: |
+          echo "🔧 Docker pre-flight check"
+          echo "Docker version:"
+          docker version
+          echo ""
+          echo "Docker info:"
+          docker info
+          echo ""
+          echo "Testing basic Docker functionality..."
+          docker run --rm hello-world || echo "❌ Basic Docker test failed"
+          echo ""
+          echo "Testing base image pull..."
+          docker pull docker.io/bitnami/minideb:bookworm || echo "❌ Base image pull failed"
+
       - name: Container Size Analysis
         if: inputs.optimization_type == 'size-analysis' || inputs.optimization_type == 'all'
         run: |
@@ -144,13 +159,32 @@ jobs:
           # Check if Dockerfile exists
           if [ ! -f "${{ matrix.container }}/Dockerfile" ]; then
             echo "❌ Dockerfile not found at ${{ matrix.container }}/Dockerfile"
+            echo "Available files in ${{ matrix.container }}:"
+            ls -la "${{ matrix.container }}/" || echo "Directory not found"
             exit 1
           fi
           
           echo "✅ Dockerfile found, starting build..."
+          echo "📂 Build context: ${{ matrix.container }}"
+          echo "🐳 Docker info:"
+          docker info || echo "Docker info check failed"
+          echo "🏗️ Docker buildx info:"
+          docker buildx ls || echo "Docker buildx check failed"
+          
+          echo "📄 Dockerfile content (first 20 lines):"
+          head -20 "${{ matrix.container }}/Dockerfile"
+          
+          echo "📂 Build context contents:"
+          find "${{ matrix.container }}" -type f | head -10
 
-          # Build container for analysis
-          if docker build -t temp-analysis:latest "${{ matrix.container }}" --progress=plain > build.log 2>&1; then
+          # Build container for analysis (disable pipefail temporarily for this section)
+          set +e
+          echo "🚀 Starting Docker build..."
+          docker build -t temp-analysis:latest "${{ matrix.container }}" --progress=plain > build.log 2>&1
+          build_exit_code=$?
+          set -e
+
+          if [ $build_exit_code -eq 0 ]; then
             echo "✅ Container built successfully"
             
             # Get image size
@@ -177,16 +211,15 @@ jobs:
             docker rmi temp-analysis:latest || true
             
           else
-            echo "❌ Failed to build container for size analysis"
-            echo "Build log:"
-            cat build.log || echo "No build log available"
-          fi
-            ' || echo "Could not analyze file sizes"
+            echo "❌ Failed to build container for size analysis (exit code: $build_exit_code)"
+            echo "📄 Build log (last 100 lines):"
+            if [ -f build.log ]; then
+              tail -100 build.log
+            else
+              echo "No build log available"
+            fi
             
-            # Cleanup
-            docker rmi temp-analysis:latest || true
-          else
-            echo "❌ Failed to build container for size analysis"
+            # Don't exit here - continue with other analysis steps
           fi
 
       - name: Multi-stage Build Analysis
