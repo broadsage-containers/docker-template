@@ -49,7 +49,7 @@ jobs:
 
       - name: Get PR info and check approval
         id: check-approval
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         with:
           script: |
             const { owner, repo } = context.repo;
@@ -276,29 +276,40 @@ jobs:
           short_sha=$(echo "${{ github.event.workflow_run.head_sha }}" | cut -c1-7)
           tags="${image_name}:${VERSION}-${PLATFORM}-pr-${PR_NUMBER}-${short_sha}"
           tags="${tags},${image_name}:pr-${PR_NUMBER}-latest"
+          tags="${tags},${image_name}:pr-${PR_NUMBER}-${VERSION}"
 
           echo "image_name=${image_name}" >> "$GITHUB_OUTPUT"
           echo "tags=${tags}" >> "$GITHUB_OUTPUT"
 
-          # Generate labels
-          labels=$(cat <<EOF
-          org.opencontainers.image.title=${APP}
-          org.opencontainers.image.description=Enterprise-grade ${APP} container image (approved PR)
-          org.opencontainers.image.url=https://github.com/${{ github.repository }}
-          org.opencontainers.image.source=https://github.com/${{ github.repository }}
-          org.opencontainers.image.version=${VERSION}
-          org.opencontainers.image.created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
-          org.opencontainers.image.revision=${{ github.event.workflow_run.head_sha }}
-          org.opencontainers.image.licenses=Apache-2.0
-          org.opencontainers.image.vendor=${{ github.repository_owner }}
-          org.opencontainers.image.base.name=docker.io/bitnami/minideb:bookworm
-          org.opencontainers.image.ref.name=pr-${PR_NUMBER}
-          EOF
-          )
+          # Generate comprehensive labels with enhanced metadata
+          build_date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
 
-          # Convert labels to single line for output
-          labels_single_line=$(echo "$labels" | tr '\n' ',' | sed 's/,$//')
-          echo "labels=${labels_single_line}" >> "$GITHUB_OUTPUT"
+          # Create labels array
+          labels=""
+          labels="${labels}org.opencontainers.image.title=${APP},"
+          labels="${labels}org.opencontainers.image.description=Enterprise-grade ${APP} container image (approved PR),"
+          labels="${labels}org.opencontainers.image.url=https://github.com/${{ github.repository }},"
+          labels="${labels}org.opencontainers.image.source=https://github.com/${{ github.repository }},"
+          labels="${labels}org.opencontainers.image.version=${VERSION},"
+          labels="${labels}org.opencontainers.image.created=${build_date},"
+          labels="${labels}org.opencontainers.image.revision=${{ github.event.workflow_run.head_sha }},"
+          labels="${labels}org.opencontainers.image.licenses=Apache-2.0,"
+          labels="${labels}org.opencontainers.image.vendor=${{ github.repository_owner }},"
+          labels="${labels}org.opencontainers.image.base.name=docker.io/bitnami/minideb:bookworm,"
+          labels="${labels}org.opencontainers.image.ref.name=pr-${PR_NUMBER},"
+          labels="${labels}org.opencontainers.image.documentation=https://github.com/${{ github.repository }}/blob/main/${CONTAINER}/README.md,"
+          labels="${labels}org.opencontainers.image.authors=Broadsage Engineering Team,"
+          labels="${labels}io.broadsage.image.build-id=${{ github.run_id }},"
+          labels="${labels}io.broadsage.image.build-number=${{ github.run_number }},"
+          labels="${labels}io.broadsage.image.pr-number=${PR_NUMBER},"
+          labels="${labels}io.broadsage.image.workflow=${{ github.workflow }},"
+          labels="${labels}io.broadsage.image.platform=${PLATFORM},"
+          labels="${labels}io.broadsage.image.architecture=${PLATFORM},"
+          labels="${labels}io.broadsage.image.type=development,"
+          labels="${labels}io.broadsage.image.security.signed=true"
+
+          # Output labels without the trailing comma
+          echo "labels=${labels}" >> "$GITHUB_OUTPUT"
 
           echo "Generated metadata for ${CONTAINER}:"
           echo "  Image: ${image_name}"
@@ -331,7 +342,39 @@ jobs:
         env:
           COSIGN_EXPERIMENTAL: 1
         run: |
-          cosign sign --yes ${{ steps.build-metadata.outputs.image_name }}@${{ steps.build.outputs.digest }}
+          set -euo pipefail
+
+          image_ref="${{ steps.build-metadata.outputs.image_name }}@${{ steps.build.outputs.digest }}"
+          echo "🔏 Signing container image: $image_ref"
+
+          # Sign the image
+          cosign sign --yes "$image_ref"
+          echo "✅ Image signed successfully"
+
+          # Add attestation with build metadata
+          echo "📋 Adding build attestation..."
+          cosign attest --yes --predicate <(cat <<EOF
+          {
+            "buildType": "github-actions",
+            "builder": {
+              "id": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            },
+            "metadata": {
+              "buildInvocationID": "${{ github.run_id }}-${{ github.run_number }}",
+              "buildStartedOn": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+              "reproducible": false
+            },
+            "materials": [
+              {
+                "uri": "${{ github.server_url }}/${{ github.repository }}",
+                "digest": {
+                  "sha1": "${{ github.sha }}"
+                }
+              }
+            ]
+          }
+          EOF
+          ) "$image_ref" || echo "⚠️ Attestation failed but continuing"
 
       - name: Run security scan with Trivy
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # master
@@ -363,7 +406,7 @@ jobs:
           egress-policy: audit
 
       - name: Update PR with results
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         with:
           script: |
             const { owner, repo } = context.repo;

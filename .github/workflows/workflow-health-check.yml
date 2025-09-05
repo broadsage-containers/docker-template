@@ -1,0 +1,244 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage <opensource@broadsage.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+---
+name: "[Monitoring] Workflow Health Check"
+
+on:
+  schedule:
+    # Run weekly on Sundays at 06:00 UTC
+    - cron: "0 6 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write # For creating issues about failing workflows
+
+jobs:
+  workflow-health-check:
+    runs-on: ubuntu-latest
+    name: Check Workflow Health
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@v2.13.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Check workflow success rates
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+            const workflows = await github.rest.actions.listRepoWorkflows({
+              owner,
+              repo
+            });
+
+            const healthReport = [];
+            const failedWorkflows = [];
+
+            for (const workflow of workflows.data.workflows) {
+              try {
+                const runs = await github.rest.actions.listWorkflowRuns({
+                  owner,
+                  repo,
+                  workflow_id: workflow.id,
+                  created: `>=${thirtyDaysAgo.toISOString()}`,
+                  per_page: 100
+                });
+                
+                const total = runs.data.total_count;
+                if (total === 0) continue;
+                
+                const successful = runs.data.workflow_runs.filter(run => run.conclusion === 'success').length;
+                const failed = runs.data.workflow_runs.filter(run => run.conclusion === 'failure').length;
+                const cancelled = runs.data.workflow_runs.filter(run => run.conclusion === 'cancelled').length;
+                const successRate = (successful / total * 100).toFixed(2);
+                
+                // Calculate average runtime for performance monitoring
+                const completedRuns = runs.data.workflow_runs.filter(run => 
+                  run.conclusion === 'success' || run.conclusion === 'failure'
+                );
+                let averageRuntime = 'N/A';
+                if (completedRuns.length > 0) {
+                  const totalRuntime = completedRuns.reduce((sum, run) => {
+                    const start = new Date(run.created_at);
+                    const end = new Date(run.updated_at);
+                    return sum + (end - start);
+                  }, 0);
+                  const avgMs = totalRuntime / completedRuns.length;
+                  const avgMinutes = Math.round(avgMs / 60000);
+                  averageRuntime = `${avgMinutes}min`;
+                }
+                
+                const workflowHealth = {
+                  name: workflow.name,
+                  total,
+                  successful,
+                  failed,
+                  cancelled,
+                  successRate: `${successRate}%`,
+                  averageRuntime
+                };
+                
+                healthReport.push(workflowHealth);
+                
+                // Flag workflows with low success rate
+                if (parseFloat(successRate) < 80 && total > 5) {
+                  failedWorkflows.push(workflowHealth);
+                }
+              } catch (error) {
+                console.log(`Error processing workflow ${workflow.name}: ${error.message}`);
+              }
+            }
+
+            // Sort by success rate (worst first)
+            healthReport.sort((a, b) => parseFloat(a.successRate) - parseFloat(b.successRate));
+
+            // Create detailed summary
+            let summary = '## 📊 Workflow Health Report - Last 30 Days\n\n';
+
+            if (failedWorkflows.length > 0) {
+              summary += '### 🚨 Workflows Needing Attention (Success Rate < 80%)\n\n';
+              failedWorkflows.forEach(w => {
+                summary += `- **${w.name}**: ${w.successRate} success rate (${w.successful}/${w.total}) - ${w.failed} failures\n`;
+              });
+              summary += '\n';
+            }
+
+            summary += '### 📈 All Workflows Performance\n\n';
+            summary += '| Workflow | Success Rate | Avg Runtime | Runs | Successful | Failed | Cancelled |\n';
+            summary += '|----------|-------------|-------------|------|------------|--------|----------|\n';
+
+            healthReport.forEach(w => {
+              const statusIcon = parseFloat(w.successRate) >= 95 ? '✅' : 
+                               parseFloat(w.successRate) >= 80 ? '⚠️' : '❌';
+              summary += `| ${statusIcon} ${w.name} | ${w.successRate} | ${w.averageRuntime} | ${w.total} | ${w.successful} | ${w.failed} | ${w.cancelled} |\n`;
+            });
+
+            // Add recommendations
+            summary += '\n### 💡 Recommendations\n\n';
+            if (failedWorkflows.length > 0) {
+              summary += '- **High Priority**: Investigate workflows with success rates below 80%\n';
+              summary += '- Consider adding retry mechanisms for flaky operations\n';
+              summary += '- Review error logs for common failure patterns\n';
+            } else {
+              summary += '- ✅ All workflows are performing well!\n';
+              summary += '- Continue monitoring for any degradation\n';
+            }
+
+            // Create summary and check if we need to create issues
+            await core.summary
+              .addHeading('Workflow Health Report - Last 30 Days')
+              .addRaw(summary)
+              .write();
+              
+            // Create issues for critically failing workflows
+            if (failedWorkflows.length > 0) {
+              const criticalFailures = failedWorkflows.filter(w => parseFloat(w.successRate) < 50);
+              
+              for (const workflow of criticalFailures) {
+                try {
+                  await github.rest.issues.create({
+                    owner,
+                    repo,
+                    title: `🚨 Critical Workflow Failure: ${workflow.name} (${workflow.successRate} success rate)`,
+                    body: `
+            ## Critical Workflow Performance Issue
+
+            The workflow **${workflow.name}** has a critically low success rate of **${workflow.successRate}** over the last 30 days.
+
+            ### Statistics
+            - **Total Runs**: ${workflow.total}
+            - **Successful**: ${workflow.successful}
+            - **Failed**: ${workflow.failed}
+            - **Cancelled**: ${workflow.cancelled}
+            - **Success Rate**: ${workflow.successRate}
+
+            ### Immediate Actions Required
+            1. 🔍 Review recent failure logs
+            2. 🔧 Identify common failure patterns
+            3. 🛠️ Implement fixes or retry mechanisms
+            4. 📊 Monitor for improvement
+
+            ### Resources
+            - [Workflow Runs](${context.payload.repository.html_url}/actions/workflows)
+            - [Error Handling Guide](.github/workflows/_error-handling.md)
+
+            This issue was automatically created by the Workflow Health Check.
+            `,
+                    labels: ['bug', 'priority: critical', 'status: needs-info', 'automation']
+                  });
+                  console.log(`Created issue for critical workflow: ${workflow.name}`);
+                } catch (error) {
+                  console.log(`Failed to create issue for ${workflow.name}: ${error.message}`);
+                }
+              }
+            }
+
+      - name: Check for outdated actions
+        run: |
+          echo "🔍 Checking for outdated GitHub Actions..."
+
+          outdated_found=false
+
+          # Find all workflow files and check for version patterns
+          find .github/workflows -name "*.yml" -o -name "*.yaml" | while read -r file; do
+            echo "Checking: $file"
+            
+            # Look for actions without version pins (dangerous)
+            if grep -q "uses:.*@main\|uses:.*@master" "$file"; then
+              echo "⚠️ WARNING: Found unpinned actions in $file"
+              grep -n "uses:.*@main\|uses:.*@master" "$file"
+              outdated_found=true
+            fi
+            
+            # Check for old common actions (examples - need updating as new versions come out)
+            if grep -q "actions/checkout@v[1-4]\." "$file"; then
+              echo "⚠️ OLD VERSION: actions/checkout v4.x or older found in $file (latest: v5.0.0)"
+              grep -n "actions/checkout@v[1-4]\." "$file"
+              outdated_found=true
+            fi
+            
+            if grep -q "actions/github-script@v[1-7]" "$file"; then
+              echo "⚠️ OLD VERSION: actions/github-script v7 or older found in $file (latest: v8.0.0)"
+              grep -n "actions/github-script@v[1-7]" "$file"
+              outdated_found=true
+            fi
+            
+            if grep -q "actions/upload-artifact@v[1-3]" "$file"; then
+              echo "⚠️ OLD VERSION: actions/upload-artifact v3 or older found in $file (latest: v4.6.2)"
+              grep -n "actions/upload-artifact@v[1-3]" "$file"
+              outdated_found=true
+            fi
+            
+            if grep -q "actions/download-artifact@v[1-4]" "$file"; then
+              echo "⚠️ OLD VERSION: actions/download-artifact v4 or older found in $file (latest: v5.0.0)"
+              grep -n "actions/download-artifact@v[1-4]" "$file"
+              outdated_found=true
+            fi
+            
+            # Check for missing SHA pins on security-critical actions
+            if grep -q "step-security/harden-runner@v[0-9]" "$file"; then
+              echo "⚠️ WARNING: harden-runner without SHA pin in $file"
+              grep -n "step-security/harden-runner@v[0-9]" "$file"
+              outdated_found=true
+            fi
+          done
+
+          if [ "$outdated_found" = "true" ]; then
+            echo ""
+            echo "🚨 OUTDATED ACTIONS FOUND! Please update to latest versions."
+            echo "📖 See: .github/workflows/_action-versions.md for current standards"
+            exit 1
+          else
+            echo "✅ All actions appear to be using recent versions"
+          fi

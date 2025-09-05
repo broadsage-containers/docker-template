@@ -104,12 +104,27 @@ See `MIGRATION_FROM_BASH.md` for detailed migration information.
 - [Container Templates](./templates/README.md)
 - [Migration Guide](./MIGRATION_FROM_BASH.md)
 - **[🎯 Conventional Commits Guide](./docs/CONVENTIONAL_COMMITS.md)** - PR title requirements
+- **[🌿 Branch Naming Guide](./docs/branch_naming.md)** - Branch naming conventions
 
 ## 🤝 Contributing
 
 ### Pull Request Requirements
 
-All PRs must follow our [Conventional Commits](./docs/CONVENTIONAL_COMMITS.md) format:
+All PRs must follow our conventions:
+
+#### Branch Names
+
+Follow our [Branch Naming Guide](./docs/branch_naming.md):
+
+```text
+feat/user-authentication
+fix/docker-build-issue
+docs/update-readme
+```
+
+#### PR Titles
+
+Follow our [Conventional Commits](./docs/CONVENTIONAL_COMMITS.md) format:
 
 ```text
 feat: add nginx 1.29 support
