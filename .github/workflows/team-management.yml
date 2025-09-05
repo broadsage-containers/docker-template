@@ -7,9 +7,9 @@ name: "[Support] Team Management and Reporting"
 
 on:
   issues:
-    types: [labeled]
+    types: [labeled] # Only run when labels are added, not on open
   pull_request:
-    types: [labeled, review_requested]
+    types: [labeled, review_requested] # Only run when labels added or reviews requested
   schedule:
     # Generate weekly reports every Monday at 9 AM UTC
     - cron: "0 9 * * 1"
@@ -65,11 +65,8 @@ jobs:
             const issue = context.payload.issue || context.payload.pull_request;
             const labels = issue.labels.map(label => label.name);
 
-            // Team assignment rules
+            // Team assignment rules - only for specific team notification labels
             const teamAssignments = {
-              'security': {
-                message: '🔐 **Security Team Notified** - This issue has been flagged for security review.'
-              },
               'area/infrastructure': {
                 message: '🏗️ **Infrastructure Team Notified** - This infrastructure issue has been assigned.'
               },
@@ -81,34 +78,76 @@ jobs:
               }
             };
 
-            // Check for team assignment
+            // Check if we already commented to avoid spam
+            const { data: existingComments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number
+            });
+
+            // Check for team assignment (skip security - handled by triage workflow)
             for (const label of labels) {
               if (teamAssignments[label]) {
-                await github.rest.issues.createComment({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: issue.number,
-                  body: teamAssignments[label].message
-                });
+                const hasTeamComment = existingComments.some(comment => 
+                  comment.user.login === 'github-actions[bot]' && 
+                  comment.body.includes(teamAssignments[label].message.split('**')[1].split('**')[0])
+                );
+
+                if (!hasTeamComment) {
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: issue.number,
+                    body: teamAssignments[label].message
+                  });
+                  console.log(`✅ Added team notification for ${label}`);
+                } else {
+                  console.log(`⏭️ Team comment for ${label} already exists`);
+                }
                 break; // Only assign to one team
               }
             }
 
       - name: Community contribution recognition
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && github.event.action == 'labeled'
         with:
           script: |
             const pr = context.payload.pull_request;
             const author = pr.user.login;
+            const labels = pr.labels.map(label => label.name);
 
-            // Check if external contributor
+            // Only run this for external contributors and only when a specific label is added
+            // Check if this is a first-time or external contribution label
+            if (!labels.includes('external-contribution')) {
+              console.log('⏭️ Skipping community recognition - not labeled as external contribution');
+              return;
+            }
+
+            // Check if we already commented on this PR
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number
+            });
+
+            const hasWelcomeComment = comments.some(comment => 
+              comment.user.login === 'github-actions[bot]' && 
+              comment.body.includes('Thank you for your contribution')
+            );
+
+            if (hasWelcomeComment) {
+              console.log('⏭️ Welcome comment already exists, skipping');
+              return;
+            }
+
             try {
               await github.rest.repos.checkCollaborator({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 username: author
               });
+              console.log('ℹ️ User is a collaborator, skipping external contributor message');
             } catch (error) {
               if (error.status === 404) {
                 // External contributor
@@ -116,8 +155,9 @@ jobs:
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   issue_number: pr.number,
-                  body: '🌟 **Thank you for your contribution!** This is from an external contributor - community involvement is appreciated! 🙏'
+                  body: '🌟 **Thank you for your contribution!** Welcome to the community - we appreciate external contributions! 🙏'
                 });
+                console.log('✅ Added welcome comment for external contributor');
               }
             }
 

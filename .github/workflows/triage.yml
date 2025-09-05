@@ -43,7 +43,9 @@ jobs:
       (github.event.action == 'opened') &&
       (github.event.inputs.action_type == 'labeling' || 
        github.event.inputs.action_type == 'all' ||
-       github.event_name != 'workflow_dispatch')
+       github.event_name != 'workflow_dispatch') &&
+      github.actor != 'dependabot[bot]' &&
+      github.actor != 'github-actions[bot]'
     permissions:
       contents: read
       issues: write
@@ -121,7 +123,9 @@ jobs:
       (github.event.action == 'opened') &&
       (github.event.inputs.action_type == 'routing' || 
        github.event.inputs.action_type == 'all' ||
-       github.event_name != 'workflow_dispatch')
+       github.event_name != 'workflow_dispatch') &&
+      github.actor != 'dependabot[bot]' &&
+      github.actor != 'github-actions[bot]'
     permissions:
       issues: write
       pull-requests: write
@@ -163,19 +167,37 @@ jobs:
 
             for (const [category, rule] of Object.entries(routingRules)) {
               if (rule.keywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
-                await github.rest.issues.addLabels({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: issue.number,
-                  labels: rule.labels
-                });
+                // Check if we already have this label to avoid duplicates
+                const hasLabel = issue.labels.some(label => rule.labels.includes(label.name));
+                if (!hasLabel) {
+                  await github.rest.issues.addLabels({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: issue.number,
+                    labels: rule.labels
+                  });
 
-                await github.rest.issues.createComment({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: issue.number,
-                  body: rule.message
-                });
+                  // Check if we already commented to avoid spam
+                  const { data: comments } = await github.rest.issues.listComments({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: issue.number
+                  });
+
+                  const hasRoutingComment = comments.some(comment => 
+                    comment.user.login === 'github-actions[bot]' && 
+                    (comment.body.includes('Security Issue') || comment.body.includes('Container Issue'))
+                  );
+
+                  if (!hasRoutingComment) {
+                    await github.rest.issues.createComment({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      issue_number: issue.number,
+                      body: rule.message
+                    });
+                  }
+                }
                 break;
               }
             }
@@ -374,26 +396,43 @@ jobs:
 
             // Post combined comment if there are suggestions
             if (comments.length > 0) {
-              const combinedComment = `👋 **Automated PR Triage**
-
-              ${comments.join('\n\n---\n\n')}
-
-              ---
-              
-              💡 **Tips for faster review:**
-              - Use our [PR template](.github/PULL_REQUEST_TEMPLATE.md)
-              - Keep PRs focused and small when possible
-              - Include tests and documentation updates
-              - Link to related issues
-              
-              Thanks for contributing! 🙏`;
-              
-              await github.rest.issues.createComment({
+              // Check if we already posted a triage comment to avoid duplicates
+              const { data: existingComments } = await github.rest.issues.listComments({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                issue_number: pr.number,
-                body: combinedComment
+                issue_number: pr.number
               });
+
+              const hasTriageComment = existingComments.some(comment => 
+                comment.user.login === 'github-actions[bot]' && 
+                comment.body.includes('Automated PR Triage')
+              );
+
+              if (!hasTriageComment) {
+                const combinedComment = `👋 **Automated PR Triage**
+
+                ${comments.join('\n\n---\n\n')}
+
+                ---
+                
+                💡 **Tips for faster review:**
+                - Use our [PR template](.github/PULL_REQUEST_TEMPLATE.md)
+                - Keep PRs focused and small when possible
+                - Include tests and documentation updates
+                - Link to related issues
+                
+                Thanks for contributing! 🙏`;
+                
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                  body: combinedComment
+                });
+                console.log('✅ Posted triage comment');
+              } else {
+                console.log('⏭️ Triage comment already exists, skipping');
+              }
             }
 
       - name: Prioritize critical issues
