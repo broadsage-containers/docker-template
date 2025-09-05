@@ -92,13 +92,21 @@ jobs:
           echo "Total containers found: ${#containers[@]}"
 
           if [ ${#containers[@]} -gt 0 ]; then
-            # Use jq to create proper JSON array
-            matrix_json=$(printf '%s\n' "${containers[@]}" | jq -R . | jq -s .)
+            echo "Debug: containers array contents:"
+            for i in "${!containers[@]}"; do
+              echo "  [$i]: '${containers[$i]}'"
+            done
+            
+            # Create compact JSON array without extra formatting
+            matrix_json=$(printf '%s\n' "${containers[@]}" | jq -R . | jq -s -c .)
             echo "matrix=${matrix_json}" >> "$GITHUB_OUTPUT"
             echo "has_containers=true" >> "$GITHUB_OUTPUT"
             
             echo "Found containers for optimization:"
             printf '  - %s\n' "${containers[@]}"
+            
+            echo "Generated matrix JSON (length: ${#matrix_json}):"
+            echo "'${matrix_json}'"
           else
             echo "No containers found for optimization"
             echo "matrix=[]" >> "$GITHUB_OUTPUT" 
