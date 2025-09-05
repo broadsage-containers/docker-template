@@ -3,23 +3,73 @@
 # SPDX-License-Identifier: Apache-2.0
 
 ---
-name: "[Support] Close Stale Issues and PRs"
+name: "[Support] Issue and PR Lifecycle Management"
 
 on:
   schedule:
-    # Run daily at 02:00 UTC
+    # Run daily at 02:00 UTC for stale management
     - cron: "0 2 * * *"
+    # Run hourly for solved issue cleanup
+    - cron: "0 * * * *"
   workflow_dispatch:
-    # Allow manual triggering
+    inputs:
+      action_type:
+        description: "Type of action to run"
+        required: false
+        default: "both"
+        type: choice
+        options:
+          - "stale"
+          - "solved"
+          - "both"
 
 # Use restrictive default permissions
 permissions:
   contents: read
 
 jobs:
+  # Handle solved issues - close them immediately
+  close-solved-issues:
+    runs-on: ubuntu-latest
+    name: Close solved issues
+    if: |
+      (github.event.schedule == '0 * * * *' || 
+       github.event.inputs.action_type == 'solved' || 
+       github.event.inputs.action_type == 'both') &&
+      github.repository_owner == 'broadsage'
+    # Job-level permissions for closing solved issues
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
+        with:
+          egress-policy: audit
+
+      - name: Close solved issues immediately
+        uses: actions/stale@3a9db7e6a41a89f618792c92c0e97cc736e1b13f # v10.0.0
+        with:
+          repo-token: ${{ secrets.AUTOBOT_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+          any-of-labels: "solved"
+          stale-issue-label: "solved"
+          days-before-stale: 0
+          days-before-close: 0
+          stale-issue-message: ""
+          close-issue-message: |
+            This issue has been automatically closed because it was marked as solved.
+
+            Thank you for your contribution! 🙏
+
+  # Handle stale issues and PRs
   stale:
     runs-on: ubuntu-latest
-    name: Stale issue job
+    name: Manage stale issues and PRs
+    if: |
+      github.event.schedule == '0 2 * * *' || 
+      github.event.inputs.action_type == 'stale' || 
+      github.event.inputs.action_type == 'both' ||
+      github.event_name == 'workflow_dispatch'
     # Job-level permissions for stale operations
     permissions:
       issues: write
