@@ -69,50 +69,132 @@ jobs:
             const body = (issue.body || '').toLowerCase();
             const labels = [];
 
-            // Type labels based on keywords
+            // Conservative type labels - only for very specific contexts
             const typeKeywords = {
-              'type: bug': ['bug', 'error', 'issue', 'problem', 'broken', 'fail'],
-              'type: feature': ['feature', 'enhancement', 'improve', 'add', 'new'],
-              'type: docs': ['doc', 'documentation', 'readme'],
-              'type: maintenance': ['update', 'upgrade', 'refactor', 'cleanup'],
-              'security': ['security', 'vulnerability', 'cve-'],
-              'performance': ['performance', 'speed', 'slow', 'optimization']
+              'type: bug': ['bug fix', 'fix bug', 'fixes bug', 'bug in', 'bug with'],
+              'type: feature': ['new feature', 'add feature', 'feature request', 'enhancement'],
+              'type: docs': ['update docs', 'fix docs', 'documentation update', 'readme update'],
+              'type: maintenance': ['dependency update', 'deps update', 'maintenance update', 'version bump'],
+              'security': ['security vulnerability', 'security issue', 'cve-', 'security patch', 'security fix'],
+              'performance': ['performance improvement', 'performance fix', 'optimize performance']
             };
 
-            // Area labels
+            // Conservative area labels - only for clear context
             const areaKeywords = {
-              'area/containers': ['docker', 'container', 'dockerfile', 'image'],
-              'area/build': ['build', 'compile', 'ci/cd', 'pipeline']
+              'area/containers': ['dockerfile issue', 'container bug', 'docker image', 'container fails'],
+              'area/build': ['build fails', 'build error', 'ci fails', 'pipeline broken']
             };
 
-            // Apply type labels (only one)
+            // Apply type labels (only one) - with better context checking
+            let typeLabelsAdded = 0;
             for (const [label, keywords] of Object.entries(typeKeywords)) {
-              if (keywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
-                labels.push(label);
-                break;
+              if (typeLabelsAdded === 0 && keywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
+                console.log(`🏷️ Matched type label "${label}" for keyword: ${keywords.find(k => title.includes(k) || body.includes(k))}`);
+                
+                // Extra check for security label to avoid false positives
+                if (label === 'security') {
+                  const securityMatch = keywords.find(k => title.includes(k) || body.includes(k));
+                  console.log(`⚠️ Security label triggered by: "${securityMatch}"`);
+                  
+                  // Only apply if it's a clear security context
+                  const hasSecurityContext = body.includes('vulnerability') || body.includes('cve') || 
+                                           body.includes('exploit') || body.includes('patch') ||
+                                           title.includes('vulnerability') || title.includes('cve');
+                  
+                  if (hasSecurityContext) {
+                    labels.push(label);
+                    typeLabelsAdded++;
+                    console.log(`✅ Applied security label due to security context`);
+                  } else {
+                    console.log(`⏭️ Skipped security label - no clear security context`);
+                  }
+                } else {
+                  labels.push(label);
+                  typeLabelsAdded++;
+                }
               }
             }
 
-            // Apply area labels
+            // Apply area labels (maximum of 2, and only if very specific)
+            let areaLabelsAdded = 0;
             for (const [label, keywords] of Object.entries(areaKeywords)) {
-              if (keywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
+              if (areaLabelsAdded < 2 && keywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
+                console.log(`🏷️ Matched area label "${label}" for keyword: ${keywords.find(k => title.includes(k) || body.includes(k))}`);
                 labels.push(label);
+                areaLabelsAdded++;
               }
             }
 
-            // Priority detection (conservative)
-            if (['critical', 'urgent', 'security'].some(word => title.includes(word) || body.includes(word))) {
-              labels.push('priority-high');
+            // Special handling for workflow/refactor PRs - be very conservative
+            if (title.includes('refactor') || title.includes('workflow') || body.includes('.github/workflows')) {
+              console.log('🔧 Detected workflow/refactor PR - applying conservative labeling');
+              
+              // Clear any auto-applied labels and only apply maintenance if appropriate
+              if (title.includes('refactor') && !labels.includes('type: maintenance')) {
+                labels.length = 0; // Clear all labels
+                labels.push('type: maintenance');
+                console.log('✅ Applied only maintenance label for refactor PR');
+              }
+            }
+
+            // Priority detection (very conservative - only for explicit urgent/critical)
+            if (['urgent', 'critical priority'].some(phrase => title.includes(phrase) || body.includes(phrase))) {
+              if (!labels.includes('priority-high')) {
+                labels.push('priority-high');
+                console.log('🚨 Applied high priority label');
+              }
+            }
+
+            // Special handling for PRs - check for additional contextual labels
+            if (!isIssue) {
+              try {
+                const { data: files } = await github.rest.pulls.listFiles({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: issue.number
+                });
+
+                const totalChanges = files.reduce((sum, file) => sum + file.additions + file.deletions, 0);
+
+                // Large PR detection (conservative threshold)
+                if (totalChanges > 800) { // Increased threshold to be less aggressive
+                  labels.push('large-pr');
+                  console.log(`📏 Applied large-pr label for ${totalChanges} line changes`);
+                }
+
+                // Missing tests detection (only for clear code changes)
+                const hasCodeChanges = files.some(file => 
+                  file.filename.match(/\.(js|ts|py|go|java|cpp|c|rs|php)$/));
+                const hasTestChanges = files.some(file => 
+                  file.filename.includes('test') || file.filename.includes('spec'));
+
+                if (hasCodeChanges && !hasTestChanges && 
+                    !title.includes('docs') && !title.includes('refactor') && 
+                    totalChanges > 100) { // Only for substantial code changes
+                  labels.push('needs-tests');
+                  console.log('🧪 Applied needs-tests label for code changes without tests');
+                }
+              } catch (error) {
+                console.log('Could not analyze PR files:', error.message);
+              }
+            }
+
+            // Final safety check - limit total auto-applied labels to 3
+            if (labels.length > 3) {
+              console.log(`⚠️ Too many labels (${labels.length}), keeping only first 3`);
+              labels.splice(3);
             }
 
             if (labels.length > 0) {
-              console.log('🏷️ Applying labels:', labels.join(', '));
+              console.log(`🏷️ Applying ${labels.length} labels:`, labels.join(', '));
               await github.rest.issues.addLabels({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: issue.number,
                 labels: labels
               });
+            } else {
+              console.log('ℹ️ No auto-labels applied - PR did not match specific criteria');
             }
 
   # Intelligent routing
@@ -151,15 +233,15 @@ jobs:
               return;
             }
 
-            // Conservative routing rules
+            // Conservative routing rules (very specific to avoid false positives)
             const routingRules = {
               security: {
-                keywords: ['security vulnerability', 'cve-', 'exploit'],
+                keywords: ['security vulnerability', 'cve-', 'security exploit', 'security issue'],
                 labels: ['security', 'priority-high'],
                 message: '🔒 **Security Issue** - This has been escalated to the security team.'
               },
               containers: {
-                keywords: ['dockerfile bug', 'container fails', 'docker build error'],
+                keywords: ['dockerfile bug', 'container fails', 'docker build error', 'image build issue'],
                 labels: ['area/containers'],
                 message: '🐳 **Container Issue** - The containers team has been notified.'
               }
@@ -170,12 +252,8 @@ jobs:
                 // Check if we already have this label to avoid duplicates
                 const hasLabel = issue.labels.some(label => rule.labels.includes(label.name));
                 if (!hasLabel) {
-                  await github.rest.issues.addLabels({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    issue_number: issue.number,
-                    labels: rule.labels
-                  });
+                  // Note: Labels are now handled by auto-label job, just add comment for routing
+                  console.log(`🎯 Routing to ${category} team (labels handled by auto-label job)`);
 
                   // Check if we already commented to avoid spam
                   const { data: comments } = await github.rest.issues.listComments({
@@ -353,7 +431,7 @@ jobs:
             const totalChanges = files.reduce((sum, file) => sum + file.additions + file.deletions, 0);
 
             if (totalChanges > 500) {
-              labels.push('large-pr');
+              // Note: large-pr label handled by auto-label job, just add to comments
               comments.push(`📏 **Large PR Detected**
               
               This PR has ${totalChanges} lines of changes. Large PRs can be harder to review effectively.
@@ -373,10 +451,10 @@ jobs:
               file.filename.includes('test') || file.filename.includes('spec'));
 
             if (hasCodeChanges && !hasTestChanges && !pr.title.toLowerCase().includes('docs')) {
-              labels.push('needs-tests');
-              comments.push(`🧪 **Tests Needed**
+              // Note: needs-tests label handled by auto-label job, just add to comments
+              comments.push(`🧪 **Tests Recommended**
               
-              This PR modifies code but doesn't appear to include tests. Please consider adding:
+              This PR modifies code but doesn't appear to include tests. Consider adding:
               - ✅ Unit tests for new functionality
               - 🔍 Integration tests if applicable
               - 📝 Update existing tests if behavior changed
@@ -384,17 +462,7 @@ jobs:
               If tests aren't needed, please explain why in the PR description. 🤓`);
             }
 
-            // Apply labels
-            if (labels.length > 0) {
-              await github.rest.issues.addLabels({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: pr.number,
-                labels: labels
-              });
-            }
-
-            // Post combined comment if there are suggestions
+            // Post combined comment if there are suggestions (no labels added by this job)
             if (comments.length > 0) {
               // Check if we already posted a triage comment to avoid duplicates
               const { data: existingComments } = await github.rest.issues.listComments({
@@ -429,7 +497,7 @@ jobs:
                   issue_number: pr.number,
                   body: combinedComment
                 });
-                console.log('✅ Posted triage comment');
+                console.log('✅ Posted triage comment (no labels added)');
               } else {
                 console.log('⏭️ Triage comment already exists, skipping');
               }
