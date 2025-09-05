@@ -260,6 +260,27 @@ jobs:
             exit 1
           fi
 
+          # Additional container validation
+          echo "🧪 Running additional container validation..."
+
+          # Check if container runs as non-root (security best practice)
+          user_id=$(docker exec "$container_id" id -u 2>/dev/null || echo "unknown")
+          if [ "$user_id" != "0" ] && [ "$user_id" != "unknown" ]; then
+            echo "✅ Container runs as non-root user (UID: $user_id)"
+          elif [ "$user_id" = "0" ]; then
+            echo "⚠️ Container runs as root (UID: 0) - verify this is intended"
+          else
+            echo "ℹ️ Could not determine user ID"
+          fi
+
+          # Test basic container health
+          echo "🔍 Testing container health..."
+          if docker exec "$container_id" sh -c 'echo "Health check: $(date)"' >/dev/null 2>&1; then
+            echo "✅ Container is responsive to commands"
+          else
+            echo "⚠️ Container may not be fully healthy"
+          fi
+
           # Cleanup
           docker stop "$container_id" || true
           docker rm "$container_id" || true
