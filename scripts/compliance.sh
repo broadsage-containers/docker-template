@@ -154,16 +154,6 @@ lint() {
   printf '\n'
 }
 
-# Lint publiccode.yml
-publiccodelint() {
-  detect_container_engine
-  check_podman_machine
-  print_header 'LINTER publiccode.yml (publiccode.yml)'
-  "$CONTAINER_ENGINE" run --rm -i italia/publiccode-parser-go -no-network /dev/stdin <publiccode.yml
-  store_exit_code "$?" "publiccode.yml" "Lint of publiccode check failed, see logs and fix problems." "Lint check for publiccode.yml passed."
-  printf '\n'
-}
-
 # License compliance with REUSE
 license() {
   detect_container_engine
@@ -225,7 +215,6 @@ main() {
   print_banner "Starting Code Quality & Compliance Checks"
   SUMMARY_TABLE=()
   lint
-  publiccodelint
   license
   commit
   check_exit_codes

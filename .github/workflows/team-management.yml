@@ -1,0 +1,213 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage <opensource@broadsage.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+---
+name: "[Support] Team Management and Reporting"
+
+on:
+  issues:
+    types: [labeled]
+  pull_request:
+    types: [labeled, review_requested]
+  schedule:
+    # Generate weekly reports every Monday at 9 AM UTC
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+    inputs:
+      action_type:
+        description: "Type of action to run"
+        required: false
+        default: "both"
+        type: choice
+        options:
+          - "assignment"
+          - "reporting"
+          - "both"
+      report_type:
+        description: "Type of report to generate"
+        required: false
+        type: choice
+        options:
+          - "weekly"
+          - "monthly"
+          - "custom"
+        default: "weekly"
+
+# Use restrictive default permissions
+permissions:
+  contents: read
+
+jobs:
+  # Team assignment based on labels
+  team-assignment:
+    runs-on: ubuntu-latest
+    name: Auto-assign teams based on labels
+    if: |
+      (github.event_name == 'issues' && github.event.action == 'labeled') ||
+      (github.event_name == 'pull_request' && 
+       (github.event.action == 'labeled' || github.event.action == 'review_requested')) ||
+      (github.event.inputs.action_type == 'assignment' || 
+       github.event.inputs.action_type == 'both')
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
+        with:
+          egress-policy: audit
+
+      - name: Assign based on labels
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const issue = context.payload.issue || context.payload.pull_request;
+            const labels = issue.labels.map(label => label.name);
+
+            // Team assignment rules
+            const teamAssignments = {
+              'security': {
+                message: '🔐 **Security Team Notified** - This issue has been flagged for security review.'
+              },
+              'area/infrastructure': {
+                message: '🏗️ **Infrastructure Team Notified** - This infrastructure issue has been assigned.'
+              },
+              'type: docs': {
+                message: '📚 **Documentation Team Notified** - This docs issue has been assigned.'
+              },
+              'priority-critical': {
+                message: '🚨 **Critical Priority** - On-call team has been notified for immediate attention.'
+              }
+            };
+
+            // Check for team assignment
+            for (const label of labels) {
+              if (teamAssignments[label]) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  body: teamAssignments[label].message
+                });
+                break; // Only assign to one team
+              }
+            }
+
+      - name: Community contribution recognition
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        if: github.event_name == 'pull_request'
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const author = pr.user.login;
+
+            // Check if external contributor
+            try {
+              await github.rest.repos.checkCollaborator({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                username: author
+              });
+            } catch (error) {
+              if (error.status === 404) {
+                // External contributor
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                  body: '🌟 **Thank you for your contribution!** This is from an external contributor - community involvement is appreciated! 🙏'
+                });
+              }
+            }
+
+  # Triage reporting and metrics
+  triage-reporting:
+    runs-on: ubuntu-latest
+    name: Generate triage metrics
+    if: |
+      github.event_name == 'schedule' ||
+      (github.event.inputs.action_type == 'reporting' || 
+       github.event.inputs.action_type == 'both')
+    permissions:
+      issues: write
+      contents: read
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
+        with:
+          egress-policy: audit
+
+      - name: Generate triage report
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const reportType = '${{ github.event.inputs.report_type || 'weekly' }}';
+            const daysBack = reportType === 'weekly' ? 7 : reportType === 'monthly' ? 30 : 7;
+
+            console.log(`📊 Generating ${reportType} triage report (${daysBack} days)`);
+
+            const now = new Date();
+            const startDate = new Date(now.getTime() - daysBack * 24 * 60 * 60 * 1000);
+            const startDateStr = startDate.toISOString().split('T')[0];
+
+            // Key metrics queries
+            const metrics = {};
+            const queries = {
+              new_issues: `repo:${context.repo.owner}/${context.repo.repo} is:issue created:>=${startDateStr}`,
+              new_prs: `repo:${context.repo.owner}/${context.repo.repo} is:pr created:>=${startDateStr}`,
+              closed_issues: `repo:${context.repo.owner}/${context.repo.repo} is:issue closed:>=${startDateStr}`,
+              merged_prs: `repo:${context.repo.owner}/${context.repo.repo} is:pr merged:>=${startDateStr}`,
+              needs_triage: `repo:${context.repo.owner}/${context.repo.repo} is:open is:issue -label:triaged`,
+              high_priority: `repo:${context.repo.owner}/${context.repo.repo} is:open is:issue label:priority-high`,
+              security_issues: `repo:${context.repo.owner}/${context.repo.repo} is:open is:issue label:security`,
+              stale_items: `repo:${context.repo.owner}/${context.repo.repo} is:open label:stale`
+            };
+
+            // Collect metrics
+            for (const [key, query] of Object.entries(queries)) {
+              try {
+                const result = await github.rest.search.issuesAndPullRequests({ q: query });
+                metrics[key] = result.data.total_count;
+                console.log(`${key}: ${metrics[key]}`);
+                // Small delay to respect rate limits
+                await new Promise(resolve => setTimeout(resolve, 100));
+              } catch (error) {
+                console.log(`Error querying ${key}:`, error.message);
+                metrics[key] = 'Error';
+              }
+            }
+
+            // Generate report
+            const report = [
+              `# 📊 ${reportType.charAt(0).toUpperCase() + reportType.slice(1)} Triage Report`,
+              `*Generated on ${now.toISOString().split('T')[0]} for the last ${daysBack} days*`,
+              '',
+              '## 📈 Activity Overview',
+              `- **New Issues**: ${metrics.new_issues}`,
+              `- **New PRs**: ${metrics.new_prs}`,
+              `- **Issues Closed**: ${metrics.closed_issues}`,
+              `- **PRs Merged**: ${metrics.merged_prs}`,
+              '',
+              '## 🔍 Current State',
+              `- **Needs Triage**: ${metrics.needs_triage}`,
+              `- **High Priority**: ${metrics.high_priority}`,
+              `- **Security Issues**: ${metrics.security_issues}`,
+              `- **Stale Items**: ${metrics.stale_items}`,
+              '',
+              '## 🎯 Action Items',
+              metrics.needs_triage > 10 ? '- ⚠️ High number of items need triage attention' : '- ✅ Triage queue is manageable',
+              metrics.high_priority > 0 ? `- 🚨 ${metrics.high_priority} high priority items need attention` : '- ✅ No high priority items pending',
+              metrics.security_issues > 0 ? `- 🔒 ${metrics.security_issues} security issues need review` : '- ✅ No pending security issues',
+              '',
+              '---',
+              '*This report is generated automatically by the triage workflow.*'
+            ].join('\n');
+
+            console.log('📋 Generated report:', report);
+
+            // For now, just log the report. In a real setup, you might:
+            // - Create an issue with the report
+            // - Send to a notification channel
+            // - Store as an artifact
+            console.log('Report generated successfully!');

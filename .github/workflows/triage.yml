@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 ---
-name: "[Support] Issue and PR Triage"
+name: "[Support] Enhanced Issue and PR Triage"
 
 on:
   issues:
@@ -19,15 +19,180 @@ on:
         description: "Specific issue number to triage (optional)"
         required: false
         type: string
+      action_type:
+        description: "Type of management action"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - "triage"
+          - "labeling"
+          - "routing"
+          - "all"
 
 # Use restrictive default permissions
 permissions:
   contents: read
 
 jobs:
+  # Auto-labeling for new issues and PRs
+  auto-label:
+    runs-on: ubuntu-latest
+    name: Auto-label issues and PRs
+    if: |
+      (github.event.action == 'opened') &&
+      (github.event.inputs.action_type == 'labeling' || 
+       github.event.inputs.action_type == 'all' ||
+       github.event_name != 'workflow_dispatch')
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
+        with:
+          egress-policy: audit
+
+      - name: Auto-label based on content
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        if: github.actor != 'dependabot[bot]'
+        continue-on-error: true
+        with:
+          github-token: ${{ secrets.AUTOBOT_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+          script: |
+            const issue = context.payload.issue || context.payload.pull_request;
+            const isIssue = !!context.payload.issue;
+            const title = issue.title.toLowerCase();
+            const body = (issue.body || '').toLowerCase();
+            const labels = [];
+
+            // Type labels based on keywords
+            const typeKeywords = {
+              'type: bug': ['bug', 'error', 'issue', 'problem', 'broken', 'fail'],
+              'type: feature': ['feature', 'enhancement', 'improve', 'add', 'new'],
+              'type: docs': ['doc', 'documentation', 'readme'],
+              'type: maintenance': ['update', 'upgrade', 'refactor', 'cleanup'],
+              'security': ['security', 'vulnerability', 'cve-'],
+              'performance': ['performance', 'speed', 'slow', 'optimization']
+            };
+
+            // Area labels
+            const areaKeywords = {
+              'area/containers': ['docker', 'container', 'dockerfile', 'image'],
+              'area/build': ['build', 'compile', 'ci/cd', 'pipeline']
+            };
+
+            // Apply type labels (only one)
+            for (const [label, keywords] of Object.entries(typeKeywords)) {
+              if (keywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
+                labels.push(label);
+                break;
+              }
+            }
+
+            // Apply area labels
+            for (const [label, keywords] of Object.entries(areaKeywords)) {
+              if (keywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
+                labels.push(label);
+              }
+            }
+
+            // Priority detection (conservative)
+            if (['critical', 'urgent', 'security'].some(word => title.includes(word) || body.includes(word))) {
+              labels.push('priority-high');
+            }
+
+            if (labels.length > 0) {
+              console.log('🏷️ Applying labels:', labels.join(', '));
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                labels: labels
+              });
+            }
+
+  # Intelligent routing
+  intelligent-routing:
+    runs-on: ubuntu-latest
+    name: Route issues intelligently
+    if: |
+      (github.event.action == 'opened') &&
+      (github.event.inputs.action_type == 'routing' || 
+       github.event.inputs.action_type == 'all' ||
+       github.event_name != 'workflow_dispatch')
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
+        with:
+          egress-policy: audit
+
+      - name: Route to appropriate teams
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        if: github.actor != 'dependabot[bot]'
+        with:
+          script: |
+            const issue = context.payload.issue || context.payload.pull_request;
+            const title = issue.title.toLowerCase();
+            const body = (issue.body || '').toLowerCase();
+
+            // Skip template content
+            const templateIndicators = ['container name(s):', 'version(s):', 'fill in details'];
+            if (templateIndicators.some(indicator => body.includes(indicator.toLowerCase()))) {
+              console.log('🚫 Template content detected, skipping routing');
+              return;
+            }
+
+            // Conservative routing rules
+            const routingRules = {
+              security: {
+                keywords: ['security vulnerability', 'cve-', 'exploit'],
+                labels: ['security', 'priority-high'],
+                message: '🔒 **Security Issue** - This has been escalated to the security team.'
+              },
+              containers: {
+                keywords: ['dockerfile bug', 'container fails', 'docker build error'],
+                labels: ['area/containers'],
+                message: '🐳 **Container Issue** - The containers team has been notified.'
+              }
+            };
+
+            for (const [category, rule] of Object.entries(routingRules)) {
+              if (rule.keywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  labels: rule.labels
+                });
+
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  body: rule.message
+                });
+                break;
+              }
+            }
+
+  # Main triage job
   triage:
     runs-on: ubuntu-latest
-    name: Triage issues and pull requests
+    name: Enhanced triage processing
+    if: |
+      github.event.inputs.action_type == 'triage' || 
+      github.event.inputs.action_type == 'all' ||
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && 
+       github.event.inputs.action_type != 'labeling' && 
+       github.event.inputs.action_type != 'routing') ||
+      (github.event_name == 'issues' && github.event.action != 'opened') ||
+      (github.event_name == 'pull_request' && github.event.action != 'opened')
     # Job-level permissions for triage operations
     permissions:
       issues: write
