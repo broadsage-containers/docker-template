@@ -103,3 +103,24 @@ See `MIGRATION_FROM_BASH.md` for detailed migration information.
 - [Task Documentation](https://taskfile.dev/)
 - [Container Templates](./templates/README.md)
 - [Migration Guide](./MIGRATION_FROM_BASH.md)
+- **[🎯 Conventional Commits Guide](./docs/CONVENTIONAL_COMMITS.md)** - PR title requirements
+
+## 🤝 Contributing
+
+### Pull Request Requirements
+
+All PRs must follow our [Conventional Commits](./docs/CONVENTIONAL_COMMITS.md) format:
+
+```text
+feat: add nginx 1.29 support
+fix(docker): resolve build issue  
+docs: update README
+```
+
+**Why?** This enables:
+
+- 🏷️ **Automatic labeling** - PRs get correct labels applied
+- 📋 **Clean history** - Consistent commit messages
+- 🚀 **Automated releases** - Semantic versioning support
+
+**Validation**: The `pr-title-validation` check will guide you if your title doesn't match the required format.

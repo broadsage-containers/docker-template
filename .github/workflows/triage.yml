@@ -35,6 +35,102 @@ permissions:
   contents: read
 
 jobs:
+  # PR Title Validation for Conventional Commits
+  validate-pr-title:
+    runs-on: ubuntu-latest
+    name: Validate PR Title Format
+    if: |
+      github.event.pull_request &&
+      (github.event.action == 'opened' || github.event.action == 'edited') &&
+      github.actor != 'dependabot[bot]' &&
+      github.actor != 'github-actions[bot]'
+    permissions:
+      contents: read
+      pull-requests: write
+      checks: write
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Validate PR Title Convention
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = context.payload.pull_request.title;
+            const conventionalCommitPattern = /^(feat|fix|docs|style|refactor|perf|test|chore|ci|build|revert)(\(.+\))?!?:\s.+/;
+            const isValid = conventionalCommitPattern.test(title);
+
+            console.log(`🔍 Validating PR title: "${title}"`);
+            console.log(`✅ Valid format: ${isValid}`);
+
+            if (!isValid) {
+              const commentBody = `## ❌ PR Title Format Issue
+
+            Hello! 👋 Your PR title doesn't follow our conventional commit format.
+
+            ### 📋 Required Format:
+            \`<type>[optional scope]: <description>\`
+
+            ### 🎯 Valid Types:
+            - \`feat\`: New features
+            - \`fix\`: Bug fixes  
+            - \`docs\`: Documentation changes
+            - \`style\`: Code style changes (formatting, etc.)
+            - \`refactor\`: Code refactoring
+            - \`perf\`: Performance improvements
+            - \`test\`: Test changes
+            - \`chore\`: Maintenance tasks
+            - \`ci\`: CI/CD changes
+            - \`build\`: Build system changes
+
+            ### 📝 Examples:
+            - \`feat: add nginx 1.29 support\`
+            - \`fix(docker): resolve build issue\`  
+            - \`docs: update README\`
+            - \`refactor(workflow): consolidate actions\`
+            - \`feat!: breaking API change\`
+
+            ### 🔧 Please update your PR title to match this format.
+
+            **Current title:** \`${title}\`
+
+            *This helps us automatically apply the correct labels and maintain a clean commit history!* ✨`;
+
+              // Add a comment explaining the requirements
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body: commentBody
+              });
+
+              // Set status check to failed
+              await github.rest.repos.createCommitStatus({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                sha: context.payload.pull_request.head.sha,
+                state: 'failure',
+                context: 'pr-title-validation',
+                description: 'PR title must follow conventional commit format'
+              });
+              
+              core.setFailed('PR title does not follow conventional commit format');
+            } else {
+              // Set status check to success
+              await github.rest.repos.createCommitStatus({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                sha: context.payload.pull_request.head.sha,
+                state: 'success',
+                context: 'pr-title-validation',
+                description: 'PR title follows conventional commit format ✅'
+              });
+              
+              console.log('✅ PR title validation passed');
+            }
+
   # Auto-labeling for new issues and PRs
   auto-label:
     runs-on: ubuntu-latest
@@ -69,71 +165,144 @@ jobs:
             const body = (issue.body || '').toLowerCase();
             const labels = [];
 
-            // Conservative type labels - only for very specific contexts
-            const typeKeywords = {
-              'type: bug': ['bug fix', 'fix bug', 'fixes bug', 'bug in', 'bug with'],
-              'type: feature': ['new feature', 'add feature', 'feature request', 'enhancement'],
-              'type: docs': ['update docs', 'fix docs', 'documentation update', 'readme update'],
-              'type: maintenance': ['dependency update', 'deps update', 'maintenance update', 'version bump'],
-              'security': ['security vulnerability', 'security issue', 'cve-', 'security patch', 'security fix'],
-              'performance': ['performance improvement', 'performance fix', 'optimize performance']
-            };
+            console.log(`🔍 Analyzing ${isIssue ? 'issue' : 'PR'}: "${issue.title}"`);
 
-            // Conservative area labels - only for clear context
-            const areaKeywords = {
-              'area/containers': ['dockerfile issue', 'container bug', 'docker image', 'container fails'],
-              'area/build': ['build fails', 'build error', 'ci fails', 'pipeline broken']
-            };
-
-            // Apply type labels (only one) - with better context checking
-            let typeLabelsAdded = 0;
-            for (const [label, keywords] of Object.entries(typeKeywords)) {
-              if (typeLabelsAdded === 0 && keywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
-                console.log(`🏷️ Matched type label "${label}" for keyword: ${keywords.find(k => title.includes(k) || body.includes(k))}`);
+            // Conventional Commit based labeling (primary method for PRs)
+            if (!isIssue) {
+              const conventionalCommitPattern = /^(feat|fix|docs|style|refactor|perf|test|chore|ci|build|revert)(\(.+\))?!?:\s/;
+              const match = issue.title.match(conventionalCommitPattern);
+              
+              if (match) {
+                const commitType = match[1];
+                const scope = match[2] ? match[2].slice(1, -1) : null; // Remove parentheses
                 
-                // Extra check for security label to avoid false positives
-                if (label === 'security') {
-                  const securityMatch = keywords.find(k => title.includes(k) || body.includes(k));
-                  console.log(`⚠️ Security label triggered by: "${securityMatch}"`);
-                  
-                  // Only apply if it's a clear security context
-                  const hasSecurityContext = body.includes('vulnerability') || body.includes('cve') || 
-                                           body.includes('exploit') || body.includes('patch') ||
-                                           title.includes('vulnerability') || title.includes('cve');
-                  
-                  if (hasSecurityContext) {
-                    labels.push(label);
-                    typeLabelsAdded++;
-                    console.log(`✅ Applied security label due to security context`);
-                  } else {
-                    console.log(`⏭️ Skipped security label - no clear security context`);
+                console.log(`✅ Detected conventional commit type: "${commitType}"${scope ? ` with scope: "${scope}"` : ''}`);
+                
+                // Map conventional commit types to labels
+                const conventionalToLabels = {
+                  'feat': 'type: feature',
+                  'fix': 'type: bug', 
+                  'docs': 'type: docs',
+                  'style': 'type: maintenance',
+                  'refactor': 'type: maintenance',
+                  'perf': 'performance',
+                  'test': 'type: maintenance',
+                  'chore': 'type: maintenance', 
+                  'ci': 'area/build',
+                  'build': 'area/build',
+                  'revert': 'type: maintenance'
+                };
+
+                if (conventionalToLabels[commitType]) {
+                  labels.push(conventionalToLabels[commitType]);
+                  console.log(`🏷️ Applied conventional commit label: "${conventionalToLabels[commitType]}"`);
+                }
+
+                // Handle scopes for area labels
+                if (scope) {
+                  const scopeToAreaLabels = {
+                    'docker': 'area/containers',
+                    'container': 'area/containers', 
+                    'containers': 'area/containers',
+                    'dockerfile': 'area/containers',
+                    'workflow': 'area/build',
+                    'workflows': 'area/build',
+                    'ci': 'area/build',
+                    'build': 'area/build',
+                    'docs': 'type: docs',
+                    'security': 'security'
+                  };
+
+                  if (scopeToAreaLabels[scope.toLowerCase()]) {
+                    const scopeLabel = scopeToAreaLabels[scope.toLowerCase()];
+                    if (!labels.includes(scopeLabel)) {
+                      labels.push(scopeLabel);
+                      console.log(`🎯 Applied scope-based label: "${scopeLabel}"`);
+                    }
                   }
-                } else {
+                }
+
+                // Check for breaking change indicator (!)
+                if (issue.title.includes('!:')) {
+                  labels.push('breaking-change');
+                  console.log('⚠️ Applied breaking-change label');
+                }
+
+              } else {
+                console.log('⚠️ PR title does not follow conventional commit format');
+                // Fallback to keyword-based labeling for non-conventional titles
+                applyFallbackLabeling();
+              }
+            }
+
+            // Fallback labeling for non-conventional PR titles
+            const applyFallbackLabeling = () => {
+              console.log('🔄 Applying fallback keyword-based labeling');
+              
+              const fallbackKeywords = {
+                'type: bug': ['bug fix', 'fix bug', 'fixes bug', 'hotfix'],
+                'type: feature': ['new feature', 'add feature', 'implement'],
+                'type: maintenance': ['refactor', 'cleanup', 'update', 'upgrade', 'bump'],
+                'type: docs': ['update docs', 'fix docs', 'documentation'],
+                'area/containers': ['docker', 'container', 'dockerfile'],
+                'area/build': ['workflow', 'ci', 'build', 'pipeline']
+              };
+
+              let fallbackApplied = 0;
+              for (const [label, keywords] of Object.entries(fallbackKeywords)) {
+                if (fallbackApplied < 2 && keywords.some(keyword => title.includes(keyword))) {
                   labels.push(label);
-                  typeLabelsAdded++;
+                  console.log(`🏷️ Applied fallback label: "${label}"`);
+                  fallbackApplied++;
+                }
+              }
+            };
+
+            // For issues, use keyword-based labeling (much more conservative)
+            if (isIssue) {
+              const issueKeywords = {
+                'type: bug': ['bug report', 'error occurred', 'issue with', 'problem with'],
+                'type: feature': ['feature request', 'enhancement request', 'new feature'],
+                'type: docs': ['documentation issue', 'docs update', 'readme issue'],
+                'question': ['question about', 'how to', 'help with']
+              };
+
+              for (const [label, keywords] of Object.entries(issueKeywords)) {
+                if (keywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
+                  labels.push(label);
+                  console.log(`🏷️ Applied issue label: "${label}"`);
+                  break; // Only one type label for issues
                 }
               }
             }
 
-            // Apply area labels (maximum of 2, and only if very specific)
-            let areaLabelsAdded = 0;
-            for (const [label, keywords] of Object.entries(areaKeywords)) {
-              if (areaLabelsAdded < 2 && keywords.some(keyword => title.includes(keyword) || body.includes(keyword))) {
-                console.log(`🏷️ Matched area label "${label}" for keyword: ${keywords.find(k => title.includes(k) || body.includes(k))}`);
-                labels.push(label);
-                areaLabelsAdded++;
-              }
+            console.log(`📋 Final labels to apply: [${labels.join(', ')}]`);
+
+            // Apply labels with safety limit
+            const maxLabels = 3;
+            const finalLabels = labels.slice(0, maxLabels);
+
+            if (labels.length > maxLabels) {
+              console.log(`⚠️ Truncated ${labels.length - maxLabels} labels due to safety limit`);
             }
 
-            // Special handling for workflow/refactor PRs - be very conservative
-            if (title.includes('refactor') || title.includes('workflow') || body.includes('.github/workflows')) {
-              console.log('🔧 Detected workflow/refactor PR - applying conservative labeling');
-              
-              // Clear any auto-applied labels and only apply maintenance if appropriate
-              if (title.includes('refactor') && !labels.includes('type: maintenance')) {
-                labels.length = 0; // Clear all labels
-                labels.push('type: maintenance');
-                console.log('✅ Applied only maintenance label for refactor PR');
+            if (finalLabels.length > 0) {
+              try {
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  labels: finalLabels
+                });
+                console.log(`✅ Successfully applied ${finalLabels.length} labels: [${finalLabels.join(', ')}]`);
+              } catch (error) {
+                console.log(`❌ Error applying labels: ${error.message}`);
+              }
+            } else {
+              console.log('ℹ️ No labels to apply');
+            } "${label}"`);
+                  break; // Only one type label for issues
+                }
               }
             }
 

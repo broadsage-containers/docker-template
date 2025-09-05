@@ -6,7 +6,7 @@ version = 1
 
 # configurations
 [[annotations]]
-path = [".github/pull_request_template.md",".markdownlint.json",".github/auto-label-config.json","library/nginx/1.29/debian-12/prebuildfs/opt/bitnami/.bitnami_components.json"]
+path = [".github/PULL_REQUEST_TEMPLATE.md",".commitlintrc.json",".markdownlint.json",".github/auto-label-config.json","library/nginx/1.29/debian-12/prebuildfs/opt/bitnami/.bitnami_components.json"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "Copyright (c) 2025 Broadsage <opensource@broadsage.com>"
 SPDX-License-Identifier = "Apache-2.0"
