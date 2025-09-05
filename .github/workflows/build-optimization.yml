@@ -140,24 +140,47 @@ jobs:
           set -euo pipefail
 
           echo "📏 Analyzing container size for ${{ matrix.container }}"
+          
+          # Check if Dockerfile exists
+          if [ ! -f "${{ matrix.container }}/Dockerfile" ]; then
+            echo "❌ Dockerfile not found at ${{ matrix.container }}/Dockerfile"
+            exit 1
+          fi
+          
+          echo "✅ Dockerfile found, starting build..."
 
           # Build container for analysis
-          docker build -t temp-analysis:latest "${{ matrix.container }}" --progress=plain > build.log 2>&1 || true
-
-          # Get image size
-          if docker images temp-analysis:latest --format "table {{.Size}}" | tail -n +2 | head -1; then
-            image_size=$(docker images temp-analysis:latest --format "{{.Size}}" | head -1)
-            echo "📊 Image size: $image_size"
+          if docker build -t temp-analysis:latest "${{ matrix.container }}" --progress=plain > build.log 2>&1; then
+            echo "✅ Container built successfully"
             
-            # Analyze layers
-            echo "🧅 Layer analysis:"
-            docker history temp-analysis:latest --format "table {{.CreatedBy}}\t{{.Size}}" --no-trunc | head -10
+            # Get image size
+            if docker images temp-analysis:latest --format "{{.Size}}" | head -1 >/dev/null 2>&1; then
+              image_size=$(docker images temp-analysis:latest --format "{{.Size}}" | head -1)
+              echo "📊 Image size: $image_size"
+              
+              # Analyze layers
+              echo "🧅 Layer analysis:"
+              docker history temp-analysis:latest --format "table {{.CreatedBy}}\t{{.Size}}" --no-trunc | head -10
+              
+              # Check for large files/directories
+              echo "🔍 Checking for large files in container:"
+              docker run --rm temp-analysis:latest sh -c '
+                echo "Top 10 largest files/directories:"
+                du -ah / 2>/dev/null | sort -rh | head -10 | grep -v "^du:"
+              ' || echo "Could not analyze file sizes"
+              
+            else
+              echo "❌ Could not get image size information"
+            fi
             
-            # Check for large files/directories
-            echo "🔍 Checking for large files in container:"
-            docker run --rm temp-analysis:latest sh -c '
-              echo "Top 10 largest files/directories:"
-              du -ah / 2>/dev/null | sort -rh | head -10 | grep -v "^du:"
+            # Cleanup
+            docker rmi temp-analysis:latest || true
+            
+          else
+            echo "❌ Failed to build container for size analysis"
+            echo "Build log:"
+            cat build.log || echo "No build log available"
+          fi
             ' || echo "Could not analyze file sizes"
             
             # Cleanup
@@ -311,7 +334,12 @@ jobs:
 
           # Save report as artifact
           mkdir -p optimization-reports
-          cat > "optimization-reports/${{ matrix.container }}-report.txt" <<EOF
+          
+          # Create safe filename by replacing slashes with dashes
+          safe_container_name=$(echo "${{ matrix.container }}" | sed 's|/|-|g')
+          report_file="optimization-reports/${safe_container_name}-report.txt"
+          
+          cat > "$report_file" <<EOF
           Container: ${{ matrix.container }}
           Date: $(date)
           Optimization Type: ${{ inputs.optimization_type }}
@@ -320,11 +348,13 @@ jobs:
           See GitHub Actions logs for detailed recommendations.
           EOF
 
+          echo "Report saved to: $report_file"
+
       - name: Upload Optimization Reports
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
-          name: optimization-report-${{ matrix.container }}
+          name: optimization-report-${{ strategy.job-index }}
           path: optimization-reports/
           retention-days: 30
 
