@@ -98,6 +98,10 @@ When you create or edit a PR:
 3. **Failure**: ❌ Red X blocks merging with helpful guidance
 4. **Auto-Labeling**: Valid titles automatically get appropriate labels applied
 
+## 🏷️ Auto-Labeling
+
+PR titles that follow conventional commit format automatically receive appropriate labels based on the commit type. For comprehensive details on how the auto-labeling system works, configuration options, and customization instructions, see the [Auto-Label System Documentation](auto-label-system.md).
+
 ## 🔒 Branch Protection
 
 The `main` branch is protected and requires:
