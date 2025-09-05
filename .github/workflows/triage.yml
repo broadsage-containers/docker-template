@@ -58,11 +58,12 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const title = context.payload.pull_request.title;
+            const title = context.payload.pull_request.title.trim().replace(/\s+/g, ' ');
             const conventionalCommitPattern = /^(feat|fix|docs|style|refactor|perf|test|chore|ci|build|revert)(\(.+\))?!?:\s.+/;
             const isValid = conventionalCommitPattern.test(title);
 
             console.log(`🔍 Validating PR title: "${title}"`);
+            console.log(`📝 Original PR title: "${context.payload.pull_request.title}"`);
             console.log(`✅ Valid format: ${isValid}`);
 
             if (!isValid) {
@@ -94,9 +95,10 @@ jobs:
 
             ### 🔧 Please update your PR title to match this format.
 
-            **Current title:** \`${title}\`
+            **Original title:** \`${context.payload.pull_request.title}\`
+            **Processed title:** \`${title}\`
 
-            *This helps us automatically apply the correct labels and maintain a clean commit history!* ✨`;
+            *Note: Whitespace and newlines are normalized for validation. This helps us automatically apply the correct labels and maintain a clean commit history!* ✨`;
 
               // Add a comment explaining the requirements
               await github.rest.issues.createComment({
