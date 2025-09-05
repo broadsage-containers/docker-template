@@ -51,7 +51,7 @@ jobs:
           script: |
             // Get branch name from different event types
             let branchName = '';
-            
+
             if (context.eventName === 'pull_request') {
               branchName = context.payload.pull_request.head.ref;
             } else if (context.eventName === 'push') {
@@ -271,21 +271,21 @@ jobs:
             }
 
             suggestions.push(`${suggestedType}/${normalizedName}`);
-            
+
             if (suggestedType !== 'feat') {
               suggestions.push(`feat/${normalizedName}`);
             }
-            
+
             if (suggestedType !== 'fix') {
               suggestions.push(`fix/${normalizedName}`);
             }
 
             const suggestionMessage = `### 🤖 Suggested Branch Names:
-            
+
             Based on your branch name \`${branchName}\`, here are some conventional alternatives:
-            
+
             ${suggestions.map(suggestion => `- \`${suggestion}\``).join('\n')}
-            
+
             You can rename your branch using:
             \`\`\`bash
             git branch -m "${branchName}" "${suggestions[0]}"
