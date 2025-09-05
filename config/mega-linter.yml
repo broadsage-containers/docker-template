@@ -10,11 +10,13 @@
 PRINT_ALPACA: false
 APPLY_FIXES: all
 LOG_LEVEL: INFO # Add explicit log level
+LOG_FILE: mega-linter.log # Explicit log file
 
 DISABLE_ERRORS: false
 SHOW_ELAPSED_TIME: true
 SHOW_SKIPPED_LINTERS: false
 VALIDATE_ALL_CODEBASE: true # Set to false for better PR performance, workflow handles this
+FAIL_WITHOUT_ERRORS: false # Don't fail if no lintable files are found
 
 # Reporter options
 CLEAR_REPORT_FOLDER: true

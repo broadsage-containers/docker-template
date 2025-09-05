@@ -1,0 +1,108 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage <opensource@broadsage.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+---
+name: "GPG Troubleshooting"
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  debug-gpg:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden the runner
+        uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout Code
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          token: ${{ secrets.AUTOBOT_GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      # Import GPG key for signing commits
+      - name: Import GPG key
+        uses: crazy-max/ghaction-import-gpg@01dd5d3ca463c7f10f7f4f7b4f177225ac661ee4 # v6.1.0
+        with:
+          gpg_private_key: ${{ secrets.AUTOBOT_GITHUB_GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.AUTOBOT_GITHUB_GPG_PASSPHRASE }}
+          fingerprint: ${{ secrets.AUTOBOT_GITHUB_GPG_FINGERPRINT }}
+          git_user_signingkey: true
+          git_commit_gpgsign: true
+          git_config_global: true
+          trust_level: 5
+
+      - name: Configure Git for broadsage-autobot
+        run: |
+          git config --global user.name "broadsage-autobot"
+          git config --global user.email "broadsage-autobot@broadsage.com"
+
+      - name: Debug GPG Configuration
+        run: |
+          echo "=== GPG Debug Information ==="
+          echo "GPG Version:"
+          gpg --version | head -1
+          echo ""
+          echo "Available GPG Keys:"
+          gpg --list-keys
+          echo ""
+          echo "Available Secret Keys:"
+          gpg --list-secret-keys
+          echo ""
+          echo "Git Configuration:"
+          git config --list | grep -E "(user|gpg|sign)"
+          echo ""
+          echo "Git Global Configuration:"
+          git config --global --list | grep -E "(user|gpg|sign)" || echo "No global GPG config"
+
+      - name: Test GPG Signing
+        run: |
+          echo "=== Testing GPG Signing ==="
+          # Create a test file
+          echo "GPG test - $(date)" > test-gpg-file.txt
+
+          # Add and commit with GPG signing
+          git add test-gpg-file.txt
+          git commit -m "test: GPG signing verification
+
+          This is a test commit to verify GPG signing in GitHub Actions.
+
+          Signed-off-by: Broadsage AutoBot <broadsage-autobot@broadsage.com>" --gpg-sign
+
+          echo "=== Verifying the commit signature ==="
+          git log --show-signature -1
+
+          echo "=== Pushing the signed commit ==="
+          git push origin ${{ github.ref_name }}
+
+      - name: Create test PR with GPG signed commits
+        uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7.0.8
+        with:
+          token: ${{ secrets.AUTOBOT_GITHUB_TOKEN }}
+          branch: gpg-test-${{ github.run_number }}
+          title: "test: GPG signature verification - Run ${{ github.run_number }}"
+          commit-message: |
+            test: automated GPG signature test
+
+            This PR tests GPG signature verification for automated commits.
+
+            Signed-off-by: Broadsage AutoBot <broadsage-autobot@broadsage.com>
+          body: |
+            ## GPG Signature Test
+
+            This PR was created to test GPG signature verification for automated commits.
+
+            **Expected Result**: All commits should show as "Verified" in GitHub UI
+
+            **Test Details**:
+            - Workflow Run: ${{ github.run_id }}
+            - Branch: gpg-test-${{ github.run_number }}
+            - GPG Key: ${{ secrets.AUTOBOT_GITHUB_GPG_FINGERPRINT }}
+
+            Please check if the commits show as verified in the GitHub UI.
