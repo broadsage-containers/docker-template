@@ -55,6 +55,10 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
 
+      - name: Install jq
+        run: |
+          sudo apt-get update && sudo apt-get install -y jq
+
       - name: Generate container matrix
         id: generate-matrix
         env:
@@ -69,21 +73,32 @@ jobs:
             echo "Using container filter: ${CONTAINER_FILTER}"
             IFS=',' read -ra FILTER_ARRAY <<< "${CONTAINER_FILTER}"
             for filter in "${FILTER_ARRAY[@]}"; do
+              # Trim whitespace from filter
+              filter=$(echo "$filter" | xargs)
+              echo "Looking for containers matching: $filter"
               mapfile -t found_containers < <(find library -name "Dockerfile" -type f | grep -E "library/${filter}/[^/]+/[^/]+/Dockerfile$" | sed 's|/Dockerfile||g' | sort)
-              containers+=("${found_containers[@]}")
+              if [ ${#found_containers[@]} -gt 0 ]; then
+                containers+=("${found_containers[@]}")
+                echo "Found ${#found_containers[@]} containers for filter '$filter'"
+              else
+                echo "No containers found for filter '$filter'"
+              fi
             done
           else
             echo "Discovering all containers for optimization"
             mapfile -t containers < <(find library -name "Dockerfile" -type f | grep -E "library/[^/]+/[^/]+/[^/]+/Dockerfile$" | sed 's|/Dockerfile||g' | sort)
           fi
 
+          echo "Total containers found: ${#containers[@]}"
+
           if [ ${#containers[@]} -gt 0 ]; then
+            # Use jq to create proper JSON array
             matrix_json=$(printf '%s\n' "${containers[@]}" | jq -R . | jq -s .)
             echo "matrix=${matrix_json}" >> "$GITHUB_OUTPUT"
             echo "has_containers=true" >> "$GITHUB_OUTPUT"
             
             echo "Found containers for optimization:"
-            printf '%s\n' "${containers[@]}"
+            printf '  - %s\n' "${containers[@]}"
           else
             echo "No containers found for optimization"
             echo "matrix=[]" >> "$GITHUB_OUTPUT" 
