@@ -1,5 +1,7 @@
 <!--
-SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage <opensource@broadsage.com>
+SPDX-FileCopyri4. **✍️ Make** your changes
+5. **✅ Test**: `make dev CONTAINER=nginx`
+6. **📝 Submit** a pull requestText: Copyright (c) 2025 Broadsage <opensource@broadsage.com>
 
 SPDX-License-Identifier: Apache-2.0
 -->
@@ -36,15 +38,15 @@ Welcome! 👋 We're excited you want to contribute to Broadsage Container Images
 
 ```bash
 # 1. Install prerequisites
-brew install go-task/tap/go-task docker
+brew install docker
 
 # 2. Clone your fork
 git clone https://github.com/YOUR_USERNAME/containers.git
 cd containers
 
 # 3. Test the setup
-task --list
-task build CONTAINER=nginx
+make help
+make build CONTAINER=nginx
 ```
 
 ## 📝 Commit Requirements
@@ -66,7 +68,7 @@ docs: update README
 
 - [ ] **Title follows format**: `type: description` (e.g., `feat: add nginx 1.29`)
 - [ ] **Signed commits**: Use `git commit -s -m "your message"`
-- [ ] **Tests pass**: Run `task test CONTAINER=your-container`
+- [ ] **Tests pass**: Run `make test CONTAINER=your-container`
 - [ ] **PR template filled**: Use appropriate template from `.github/PULL_REQUEST_TEMPLATE/`
 
 ## 🏷️ Auto-Labeling
@@ -105,4 +107,3 @@ By contributing, you agree your code will be licensed under [Apache 2.0](LICENSE
 ---
 
 **Ready to contribute?** 🚀 Start with an [issue](../../issues) or join the [discussion](../../discussions)!
-
