@@ -26,7 +26,7 @@ help:
 	@echo "  clean                	Clean build artifacts and temporary files"
 	@echo ""
 	@echo "Quality Assurance Targets:"
-	@echo "  check-compliance     	Run code quality & compliance checks using MegaLinter, PublicCodeLint, FSFE REUSE Compliance, and Conform"
+	@echo "  check-compliance     	Run code quality & compliance checks using MegaLinter, FSFE REUSE Compliance, and Conform"
 	@echo "  check-security       	Run security scans and vulnerability checks"
 	@echo "  check-dependencies   	Check for dependency vulnerabilities"
 	@echo ""
