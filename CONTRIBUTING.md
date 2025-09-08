@@ -11,7 +11,7 @@ SPDX-License-Identifier: Apache-2.0
 [![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-%23FE5196?style=flat&logo=conventionalcommits&logoColor=white)](https://conventionalcommits.org)
 [![DCO - developer certificate of origin](https://img.shields.io/badge/DCO-Developer%20Certificate%20of%20Origin-lightyellow?style=flat)](https://developercertificate.org/)
 
-Welcome! 👋 We're excited you want to contribute to Broadsage Container Images!
+Welcome! 👋 We're excited you want to contribute to Broadsage Containers!
 
 ## 🚀 Quick Start
 
