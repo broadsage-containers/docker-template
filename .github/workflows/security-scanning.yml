@@ -279,7 +279,7 @@ jobs:
         if: always() && steps.check-image.outputs.exists == 'true' && steps.check-image.outputs.skip_old_image == 'false'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: security-scan-results-${{ matrix.containers.container }}
+          name: security-scan-results-${{ matrix.containers.app }}-${{ matrix.containers.version }}-${{ matrix.containers.platform }}
           path: trivy-results.sarif
 
   # Monthly SBOM generation job
@@ -314,10 +314,10 @@ jobs:
         with:
           image: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.containers.app }}:${{ matrix.containers.version }}-${{ matrix.containers.platform }}
           format: spdx-json
-          output-file: sbom-${{ matrix.containers.container }}.spdx.json
+          output-file: sbom-${{ matrix.containers.app }}-${{ matrix.containers.version }}-${{ matrix.containers.platform }}.spdx.json
 
       - name: Upload SBOM
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: sbom-${{ matrix.containers.container }}
-          path: sbom-${{ matrix.containers.container }}.spdx.json
+          name: sbom-${{ matrix.containers.app }}-${{ matrix.containers.version }}-${{ matrix.containers.platform }}
+          path: sbom-${{ matrix.containers.app }}-${{ matrix.containers.version }}-${{ matrix.containers.platform }}.spdx.json
