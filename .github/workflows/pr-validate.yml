@@ -33,8 +33,9 @@ jobs:
     permissions:
       contents: read
     outputs:
-      matrix: ${{ steps.generate-matrix.outputs.matrix }}
-      has_changes: ${{ steps.generate-matrix.outputs.has_changes }}
+      matrix: ${{ steps.discover.outputs.matrix }}
+      has_changes: ${{ steps.discover.outputs.has_changes }}
+      container_count: ${{ steps.discover.outputs.container_count }}
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
@@ -58,61 +59,16 @@ jobs:
             **/LICENSE
             .github/**
 
-      - name: Generate build matrix
-        id: generate-matrix
-        env:
-          CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
-        run: |
-          set -euo pipefail
-
-          echo "Debug: Changed files: $CHANGED_FILES"
-          echo "Debug: Event name: ${{ github.event_name }}"
-
-          # Initialize containers array
-          containers=()
-
-          echo "Discovering containers from changed files"
-
-          # Regular event handling
-          for file in $CHANGED_FILES; do
-            # Extract container path pattern: library/{app}/{version}/{platform}
-            if [[ "$file" =~ ^library/([^/]+)/([^/]+)/([^/]+)/ ]]; then
-              container_path="library/${BASH_REMATCH[1]}/${BASH_REMATCH[2]}/${BASH_REMATCH[3]}"
-              if [[ -f "$container_path/Dockerfile" ]]; then
-                containers+=("$container_path")
-              fi
-            fi
-          done
-
-          # Remove duplicates and create matrix
-          if [[ ${#containers[@]} -gt 0 ]]; then
-            mapfile -t unique_containers < <(printf "%s\n" "${containers[@]}" | sort -u)
-            echo "Found containers to build: ${unique_containers[*]}"
-            
-            # Generate JSON matrix
-            matrix_json="["
-            for i in "${!unique_containers[@]}"; do
-              container="${unique_containers[$i]}"
-              app_name=$(echo "$container" | cut -d'/' -f2)
-              version=$(echo "$container" | cut -d'/' -f3)
-              platform=$(echo "$container" | cut -d'/' -f4)
-              
-              if [[ $i -gt 0 ]]; then
-                matrix_json+=","
-              fi
-              
-              matrix_json+="{\"container\":\"$container\",\"app\":\"$app_name\",\"version\":\"$version\",\"platform\":\"$platform\"}"
-            done
-            matrix_json+="]"
-            
-            echo "matrix={\"include\":$matrix_json}" >> "$GITHUB_OUTPUT"
-            echo "has_changes=true" >> "$GITHUB_OUTPUT"
-            echo "Generated matrix: $matrix_json"
-          else
-            echo "No containers found to build"
-            echo "matrix={\"include\":[]}" >> "$GITHUB_OUTPUT"
-            echo "has_changes=false" >> "$GITHUB_OUTPUT"
-          fi
+      - name: Discover containers using composite action
+        id: discover
+        uses: ./.github/actions/discover-containers
+        with:
+          event_type: ${{ github.event_name }}
+          changed_files: ${{ steps.changed-files.outputs.all_changed_files }}
+          containers_filter: ""
+          force_all: "false"
+          include_dev_versions: "true"
+          base_ref: ${{ github.event.pull_request.base.ref || 'main' }}
 
   # Lint and validate Dockerfiles
   lint-dockerfiles:
@@ -184,120 +140,33 @@ jobs:
 
       - name: Generate build metadata
         id: build-metadata
-        env:
-          CONTAINER: ${{ matrix.container }}
-          APP: ${{ matrix.app }}
-          VERSION: ${{ matrix.version }}
-          PLATFORM: ${{ matrix.platform }}
-        run: |
-          set -euo pipefail
-
-          # Generate image name
-          image_name="${REGISTRY}/${IMAGE_NAMESPACE}/${APP}"
-
-          # Generate test tags for PR
-          short_sha=$(echo "${{ github.sha }}" | cut -c1-7)
-          tags="${image_name}:${VERSION}-${PLATFORM}-pr-${{ github.event.number }}-${short_sha}"
-
-          echo "image_name=${image_name}" >> "$GITHUB_OUTPUT"
-          echo "tags=${tags}" >> "$GITHUB_OUTPUT"
-
-          # Generate labels
-          labels=$(cat <<EOF
-          org.opencontainers.image.title=${APP}
-          org.opencontainers.image.description=Enterprise-grade ${APP} container image (PR build)
-          org.opencontainers.image.url=https://github.com/${{ github.repository }}
-          org.opencontainers.image.source=https://github.com/${{ github.repository }}
-          org.opencontainers.image.version=${VERSION}
-          org.opencontainers.image.created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
-          org.opencontainers.image.revision=${{ github.sha }}
-          org.opencontainers.image.licenses=Apache-2.0
-          org.opencontainers.image.vendor=${{ github.repository_owner }}
-          org.opencontainers.image.base.name=docker.io/bitnami/minideb:bookworm
-          EOF
-          )
-
-          # Convert labels to single line for output
-          labels_single_line=$(echo "$labels" | tr '\n' ',' | sed 's/,$//')
-          echo "labels=${labels_single_line}" >> "$GITHUB_OUTPUT"
-
-          echo "Generated metadata for ${CONTAINER}:"
-          echo "  Image: ${image_name}"
-          echo "  Tags: ${tags}"
-
-      - name: Build Docker image (test only)
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
-        id: build
+        uses: ./.github/actions/build-metadata
         with:
-          context: ${{ matrix.container }}
-          file: ${{ matrix.container }}/Dockerfile
-          platforms: linux/amd64 # Only build for amd64 in PR checks for speed
-          push: false
-          load: true
-          tags: ${{ steps.build-metadata.outputs.tags }}
-          labels: ${{ steps.build-metadata.outputs.labels }}
-          cache-from: type=gha,scope=build-${{ matrix.app }}-${{ matrix.version }}-${{ matrix.platform }}
-          cache-to: type=gha,mode=max,scope=build-${{ matrix.app }}-${{ matrix.version }}-${{ matrix.platform }}
+          container_path: ${{ matrix.container }}
+          app_name: ${{ matrix.app }}
+          version: ${{ matrix.version }}
+          platform: ${{ matrix.platform }}
+          registry: ${{ env.REGISTRY }}
+          image_namespace: ${{ env.IMAGE_NAMESPACE }}
+          event_name: ${{ github.event_name }}
+          ref: ${{ github.ref }}
+          sha: ${{ github.sha }}
+          is_production: "false"
 
-      - name: Test container startup
-        run: |
-          set -euo pipefail
-
-          image_tag="${{ steps.build-metadata.outputs.tags }}"
-          echo "Testing container startup for: $image_tag"
-
-          # Run basic startup test
-          container_id=$(docker run -d "$image_tag")
-
-          # Wait for container to start and check if it's running
-          sleep 5
-          if docker ps --filter "id=$container_id" --format "table {{.ID}}\t{{.Status}}" | grep -q "Up"; then
-            echo "✅ Container started successfully"
-            docker logs "$container_id" || true
-          else
-            echo "❌ Container failed to start"
-            docker logs "$container_id" || true
-            exit 1
-          fi
-
-          # Additional container validation
-          echo "🧪 Running additional container validation..."
-
-          # Check if container runs as non-root (security best practice)
-          user_id=$(docker exec "$container_id" id -u 2>/dev/null || echo "unknown")
-          if [ "$user_id" != "0" ] && [ "$user_id" != "unknown" ]; then
-            echo "✅ Container runs as non-root user (UID: $user_id)"
-          elif [ "$user_id" = "0" ]; then
-            echo "⚠️ Container runs as root (UID: 0) - verify this is intended"
-          else
-            echo "ℹ️ Could not determine user ID"
-          fi
-
-          # Test basic container health
-          echo "🔍 Testing container health..."
-          if docker exec "$container_id" sh -c 'echo "Health check: $(date)"' >/dev/null 2>&1; then
-            echo "✅ Container is responsive to commands"
-          else
-            echo "⚠️ Container may not be fully healthy"
-          fi
-
-          # Cleanup
-          docker stop "$container_id" || true
-          docker rm "$container_id" || true
-
-      - name: Run security scan with Trivy
-        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # master
+      - name: Build and test container
+        id: build-test
+        uses: ./.github/actions/docker-build
         with:
-          image-ref: ${{ steps.build-metadata.outputs.tags }}
-          format: "sarif"
-          output: "trivy-results.sarif"
-
-      - name: Upload Trivy scan results
-        uses: github/codeql-action/upload-sarif@2d92b76c45b91eb80fc44c74ce3fce0ee94e8f9d # v3.30.0
-        if: always()
-        with:
-          sarif_file: "trivy-results.sarif"
-          category: "trivy"
+          container_path: ${{ matrix.container }}
+          image_tags: ${{ steps.build-metadata.outputs.tags }}
+          image_labels: ${{ steps.build-metadata.outputs.labels }}
+          build_platforms: linux/amd64 # Only build for amd64 in PR checks for speed
+          push_image: "false"
+          load_image: "true"
+          cache_scope: build-${{ matrix.app }}-${{ matrix.version }}-${{ matrix.platform }}
+          enable_security_scan: "true"
+          enable_attestations: "false"
+          test_image_tag: ${{ steps.build-metadata.outputs.tags }}
 
   # Summary job
   pr-check-summary:

@@ -56,8 +56,9 @@ jobs:
        github.event_name == 'workflow_dispatch' ||
        github.event_name == 'schedule')
     outputs:
-      matrix: ${{ steps.generate-matrix.outputs.matrix }}
-      has_changes: ${{ steps.generate-matrix.outputs.has_changes }}
+      matrix: ${{ steps.discover.outputs.matrix }}
+      has_changes: ${{ steps.discover.outputs.has_changes }}
+      container_count: ${{ steps.discover.outputs.container_count }}
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
@@ -84,78 +85,15 @@ jobs:
             **/LICENSE
             .github/**
 
-      - name: Generate build matrix
-        id: generate-matrix
-        env:
-          CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
-          FORCE_BUILD: ${{ github.event.inputs.force_build }}
-          CONTAINERS_FILTER: ${{ github.event.inputs.containers_filter }}
-        run: |
-          set -euo pipefail
-
-          echo "Debug: Changed files: $CHANGED_FILES"
-          echo "Debug: Force build: $FORCE_BUILD"
-          echo "Debug: Containers filter: $CONTAINERS_FILTER"
-          echo "Debug: Event name: ${{ github.event_name }}"
-
-          # Initialize containers array
-          containers=()
-
-          if [[ "$FORCE_BUILD" == "true" || "${{ github.event_name }}" == "schedule" ]]; then
-            echo "Force build or scheduled run - discovering all containers"
-            mapfile -t containers < <(find library -name "Dockerfile" -type f | grep -E "library/[^/]+/[^/]+/[^/]+/Dockerfile$" | sed 's|/Dockerfile||g' | sort)
-          elif [[ -n "$CONTAINERS_FILTER" ]]; then
-            echo "Using container filter: $CONTAINERS_FILTER"
-            IFS=',' read -ra FILTER_ARRAY <<< "$CONTAINERS_FILTER"
-            for filter in "${FILTER_ARRAY[@]}"; do
-              filter=$(echo "$filter" | xargs) # trim whitespace
-              mapfile -t found_containers < <(find library -name "Dockerfile" -type f | grep -E "library/$filter/[^/]+/[^/]+/Dockerfile$" | sed 's|/Dockerfile||g' | sort)
-              containers+=("${found_containers[@]}")
-            done
-          else
-            echo "Discovering containers from changed files"
-            
-            # Regular event handling for push events
-            for file in $CHANGED_FILES; do
-              # Extract container path pattern: library/{app}/{version}/{platform}
-              if [[ "$file" =~ ^library/([^/]+)/([^/]+)/([^/]+)/ ]]; then
-                container_path="library/${BASH_REMATCH[1]}/${BASH_REMATCH[2]}/${BASH_REMATCH[3]}"
-                if [[ -f "$container_path/Dockerfile" ]]; then
-                  containers+=("$container_path")
-                fi
-              fi
-            done
-          fi
-
-          # Remove duplicates and create matrix
-          if [[ ${#containers[@]} -gt 0 ]]; then
-            mapfile -t unique_containers < <(printf "%s\n" "${containers[@]}" | sort -u)
-            echo "Found containers to build: ${unique_containers[*]}"
-            
-            # Generate JSON matrix
-            matrix_json="["
-            for i in "${!unique_containers[@]}"; do
-              container="${unique_containers[$i]}"
-              app_name=$(echo "$container" | cut -d'/' -f2)
-              version=$(echo "$container" | cut -d'/' -f3)
-              platform=$(echo "$container" | cut -d'/' -f4)
-              
-              if [[ $i -gt 0 ]]; then
-                matrix_json+=","
-              fi
-              
-              matrix_json+="{\"container\":\"$container\",\"app\":\"$app_name\",\"version\":\"$version\",\"platform\":\"$platform\"}"
-            done
-            matrix_json+="]"
-            
-            echo "matrix={\"include\":$matrix_json}" >> "$GITHUB_OUTPUT"
-            echo "has_changes=true" >> "$GITHUB_OUTPUT"
-            echo "Generated matrix: $matrix_json"
-          else
-            echo "No containers found to build"
-            echo "matrix={\"include\":[]}" >> "$GITHUB_OUTPUT"
-            echo "has_changes=false" >> "$GITHUB_OUTPUT"
-          fi
+      - name: Discover containers using composite action
+        id: discover
+        uses: ./.github/actions/discover-containers
+        with:
+          event_type: ${{ github.event_name }}
+          changed_files: ${{ steps.changed-files.outputs.all_changed_files }}
+          containers_filter: ${{ github.event.inputs.containers_filter }}
+          force_all: ${{ github.event.inputs.force_build == 'true' || github.event_name == 'schedule' }}
+          include_dev_versions: "true"
 
   # Lint and validate Dockerfiles
   lint-dockerfiles:
@@ -235,191 +173,81 @@ jobs:
 
       - name: Generate build metadata
         id: build-metadata
-        env:
-          CONTAINER: ${{ matrix.container }}
-          APP: ${{ matrix.app }}
-          VERSION: ${{ matrix.version }}
-          PLATFORM: ${{ matrix.platform }}
-        run: |
-          set -euo pipefail
-
-          # Generate image name
-          image_name="${REGISTRY}/${IMAGE_NAMESPACE}/${APP}"
-
-          # Generate tags
-          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
-            # Production tags for main branch
-            tags="${image_name}:${VERSION}-${PLATFORM}"
-            tags="${tags},${image_name}:${VERSION}"
-            if [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+ ]]; then
-              major_version=$(echo "${VERSION}" | cut -d'.' -f1)
-              tags="${tags},${image_name}:${major_version}"
-            fi
-            tags="${tags},${image_name}:latest"
-          else
-            # Development tags for other events
-            short_sha=$(echo "${{ github.sha }}" | cut -c1-7)
-            tags="${image_name}:${VERSION}-${PLATFORM}-${short_sha}"
-            tags="${tags},${image_name}:dev-${short_sha}"
-          fi
-
-          echo "image_name=${image_name}" >> "$GITHUB_OUTPUT"
-          echo "tags=${tags}" >> "$GITHUB_OUTPUT"
-
-          # Generate labels
-          labels=$(cat <<EOF
-          org.opencontainers.image.title=${APP}
-          org.opencontainers.image.description=Enterprise-grade ${APP} container image
-          org.opencontainers.image.url=https://github.com/${{ github.repository }}
-          org.opencontainers.image.source=https://github.com/${{ github.repository }}
-          org.opencontainers.image.version=${VERSION}
-          org.opencontainers.image.created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
-          org.opencontainers.image.revision=${{ github.sha }}
-          org.opencontainers.image.licenses=Apache-2.0
-          org.opencontainers.image.vendor=${{ github.repository_owner }}
-          org.opencontainers.image.base.name=docker.io/bitnami/minideb:bookworm
-          EOF
-          )
-
-          # Convert labels to single line for output
-          labels_single_line=$(echo "$labels" | tr '\n' ',' | sed 's/,$//')
-          echo "labels=${labels_single_line}" >> "$GITHUB_OUTPUT"
-
-          echo "Generated metadata for ${CONTAINER}:"
-          echo "  Image: ${image_name}"
-          echo "  Tags: ${tags}"
-          echo "  Labels: ${labels_single_line}"
-
-      - name: Build and test image
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
-        id: build
+        uses: ./.github/actions/build-metadata
         with:
-          context: ${{ matrix.container }}
-          file: ${{ matrix.container }}/Dockerfile
-          platforms: linux/amd64
-          push: false
-          load: true
-          tags: test-image:latest
-          labels: ${{ steps.build-metadata.outputs.labels }}
-          cache-from: type=gha,scope=build-${{ matrix.app }}-${{ matrix.version }}-${{ matrix.platform }}
-          cache-to: type=gha,mode=max,scope=build-${{ matrix.app }}-${{ matrix.version }}-${{ matrix.platform }}
+          container_path: ${{ matrix.container }}
+          app_name: ${{ matrix.app }}
+          version: ${{ matrix.version }}
+          platform: ${{ matrix.platform }}
+          registry: ${{ env.REGISTRY }}
+          image_namespace: ${{ env.IMAGE_NAMESPACE }}
+          event_name: ${{ github.event_name }}
+          ref: ${{ github.ref }}
+          sha: ${{ github.sha }}
+          is_production: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && github.event.inputs.push_images == 'true') }}
 
-      - name: Test container functionality
-        run: |
-          set -euo pipefail
-          echo "Testing container functionality..."
-
-          # Basic container health check
-          docker run --rm --name test-container -d test-image:latest
-          sleep 5
-
-          # Check if container is running
-          if docker ps | grep -q test-container; then
-            echo "✅ Container is running successfully"
-            docker stop test-container
-          else
-            echo "❌ Container failed to start"
-            docker logs test-container || true
-            exit 1
-          fi
-
-      - name: Security scan with Trivy
-        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # master
+      - name: Build and test container (local)
+        id: build-test
+        uses: ./.github/actions/docker-build
         with:
-          image-ref: test-image:latest
-          format: "sarif"
-          output: "trivy-results.sarif"
+          container_path: ${{ matrix.container }}
+          image_tags: ${{ steps.build-metadata.outputs.tags }}
+          image_labels: ${{ steps.build-metadata.outputs.labels }}
+          build_platforms: linux/amd64
+          push_image: "false"
+          load_image: "true"
+          cache_scope: build-${{ matrix.app }}-${{ matrix.version }}-${{ matrix.platform }}
+          enable_security_scan: "true"
+          enable_attestations: "false"
+          test_image_tag: test-image:latest
 
-      - name: Upload Trivy scan results
-        uses: github/codeql-action/upload-sarif@2d92b76c45b91eb80fc44c74ce3fce0ee94e8f9d # v3.30.0
-        if: always()
-        with:
-          sarif_file: trivy-results.sarif
-          category: trivy-${{ matrix.container }}
-
-      - name: Generate security report
-        if: always()
-        run: |
-          set -euo pipefail
-
-          {
-            echo "## 🔒 Security Scan Results"
-            echo "**Container:** ${{ matrix.container }}"
-            echo "**Image:** ${{ steps.build-metadata.outputs.image_name }}"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          if [[ -f "trivy-results.sarif" ]]; then
-            # Parse SARIF results
-            {
-              critical_count=$(jq -r '.runs[0].results[]? | select(.level=="error") | .ruleId' trivy-results.sarif 2>/dev/null | wc -l || echo "0")
-              high_count=$(jq -r '.runs[0].results[]? | select(.level=="warning") | .ruleId' trivy-results.sarif 2>/dev/null | wc -l || echo "0")
-              
-              echo "| Severity | Count |"
-              echo "|----------|-------|"
-              echo "| Critical | $critical_count |"
-              echo "| High | $high_count |"
-            } >> "$GITHUB_STEP_SUMMARY"
-            
-            if [[ "$critical_count" -gt 0 ]]; then
-              echo "⚠️ **Critical vulnerabilities found!**" >> "$GITHUB_STEP_SUMMARY"
-              echo "critical_vulns=true" >> "$GITHUB_OUTPUT"
-            elif [[ "$high_count" -gt 0 ]]; then
-              echo "⚠️ **High severity vulnerabilities found**" >> "$GITHUB_STEP_SUMMARY"
-              echo "high_vulns=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "✅ **No critical or high severity vulnerabilities found**" >> "$GITHUB_STEP_SUMMARY"
-              echo "clean_scan=true" >> "$GITHUB_OUTPUT"
-            fi
-          else
-            echo "❌ **Security scan failed**" >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-      - name: Build multi-platform image (production)
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
-        id: push
+      - name: Build and push production image
+        id: build-production
         if: |
           (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
           (github.event_name == 'workflow_dispatch' && github.event.inputs.push_images == 'true')
+        uses: ./.github/actions/docker-build
         with:
-          context: ${{ matrix.container }}
-          file: ${{ matrix.container }}/Dockerfile
-          platforms: ${{ env.BUILD_PLATFORMS }}
-          push: true
-          tags: ${{ steps.build-metadata.outputs.tags }}
-          labels: ${{ steps.build-metadata.outputs.labels }}
-          cache-from: type=gha,scope=build-${{ matrix.app }}-${{ matrix.version }}-${{ matrix.platform }}
-          provenance: true
-          sbom: true
-          outputs: type=registry
+          container_path: ${{ matrix.container }}
+          image_tags: ${{ steps.build-metadata.outputs.tags }}
+          image_labels: ${{ steps.build-metadata.outputs.labels }}
+          build_platforms: ${{ env.BUILD_PLATFORMS }}
+          push_image: "true"
+          load_image: "false"
+          cache_scope: build-${{ matrix.app }}-${{ matrix.version }}-${{ matrix.platform }}
+          registry_username: ${{ github.actor }}
+          registry_password: ${{ secrets.GITHUB_TOKEN }}
+          enable_security_scan: "false"
+          enable_attestations: "true"
 
       - name: Generate SBOM
-        if: steps.push.outcome == 'success'
+        if: steps.build-production.outcome == 'success'
         uses: anchore/sbom-action@da167eac915b4e86f08b264dbdbc867b61be6f0c # v0.20.5
         with:
-          image: ${{ steps.build-metadata.outputs.image_name }}@${{ steps.push.outputs.digest }}
+          image: ${{ steps.build-metadata.outputs.image_name }}@${{ steps.build-production.outputs.image_digest }}
           format: "spdx-json"
           output-file: "sbom.spdx.json"
 
       - name: Attest SBOM
-        if: steps.push.outcome == 'success'
+        if: steps.build-production.outcome == 'success'
         uses: actions/attest-sbom@4651f806c01d8637787e274ac3bdf724ef169f34 # v3.0.0
         id: attest-sbom
         with:
           subject-name: ${{ steps.build-metadata.outputs.image_name }}
-          subject-digest: ${{ steps.push.outputs.digest }}
+          subject-digest: ${{ steps.build-production.outputs.image_digest }}
           sbom-path: "sbom.spdx.json"
           push-to-registry: true
 
       - name: Install Cosign for additional signing
-        if: steps.push.outcome == 'success'
+        if: steps.build-production.outcome == 'success'
         uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
 
       - name: Sign container image with Cosign
-        if: steps.push.outcome == 'success'
+        if: steps.build-production.outcome == 'success'
         env:
           COSIGN_EXPERIMENTAL: 1
         run: |
-          image_ref="${{ steps.build-metadata.outputs.image_name }}@${{ steps.push.outputs.digest }}"
+          image_ref="${{ steps.build-metadata.outputs.image_name }}@${{ steps.build-production.outputs.image_digest }}"
 
           # Sign the image
           cosign sign --yes "${image_ref}"
@@ -432,15 +260,15 @@ jobs:
           echo "✅ Signed image: ${image_ref}"
 
       - name: Generate build artifacts summary
-        if: steps.push.outcome == 'success'
+        if: steps.build-production.outcome == 'success'
         run: |
-          image_ref="${{ steps.build-metadata.outputs.image_name }}@${{ steps.push.outputs.digest }}"
+          image_ref="${{ steps.build-metadata.outputs.image_name }}@${{ steps.build-production.outputs.image_digest }}"
 
           {
             echo "## 📦 Build Artifacts for ${{ matrix.container }}"
             echo "**Image:** \`${image_ref}\`"
             echo "**Tags:** ${{ steps.build-metadata.outputs.tags }}"
-            echo "**Digest:** \`${{ steps.push.outputs.digest }}\`"
+            echo "**Digest:** \`${{ steps.build-production.outputs.image_digest }}\`"
             echo ""
             echo "### 🔒 Security Features Enabled"
             echo "- ✅ **SBOM Generated**: Software Bill of Materials created and attested"

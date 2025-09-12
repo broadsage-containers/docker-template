@@ -1,0 +1,192 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage <opensource@broadsage.com>
+# SPDX-License-Identifier: Apache-2.0
+
+---
+name: "Discover Containers"
+description: "Discovers containers that need to be built, tested, or scanned based on changes and filters"
+
+inputs:
+  event_type:
+    description: "Event type (push, pull_request, schedule, workflow_dispatch)"
+    required: true
+  changed_files:
+    description: "Space-separated list of changed files"
+    required: false
+    default: ""
+  containers_filter:
+    description: "Comma-separated list of containers to include (e.g., nginx,apache)"
+    required: false
+    default: ""
+  force_all:
+    description: "Force discovery of all containers regardless of changes"
+    required: false
+    default: "false"
+  include_dev_versions:
+    description: "Include development versions (dev, alpha, beta, rc, snapshot)"
+    required: false
+    default: "true"
+  base_ref:
+    description: "Base reference for PR comparisons"
+    required: false
+    default: "main"
+
+outputs:
+  matrix:
+    description: "JSON matrix of containers to process"
+    value: ${{ steps.generate-matrix.outputs.matrix }}
+  has_changes:
+    description: "Whether any containers were found to process"
+    value: ${{ steps.generate-matrix.outputs.has_changes }}
+  container_count:
+    description: "Number of containers discovered"
+    value: ${{ steps.generate-matrix.outputs.container_count }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Detect changed containers for PR
+      id: detect-pr-changes
+      if: inputs.event_type == 'pull_request'
+      shell: bash
+      run: |
+        set -euo pipefail
+        echo "Detecting changed containers for PR optimization..."
+
+        # Get changed files from git if not provided
+        if [[ -z "${{ inputs.changed_files }}" ]]; then
+          changed_files=$(git diff --name-only origin/${{ inputs.base_ref }}...HEAD)
+        else
+          changed_files="${{ inputs.changed_files }}"
+        fi
+
+        echo "Changed files:"
+        echo "$changed_files"
+
+        # Extract changed container directories
+        changed_containers=()
+        while IFS= read -r file; do
+          if [[ -n "$file" && $file =~ ^library/([^/]+)/([^/]+)/([^/]+)/.*$ ]]; then
+            container_path="${BASH_REMATCH[1]}/${BASH_REMATCH[2]}/${BASH_REMATCH[3]}"
+            if [[ ! " ${changed_containers[*]} " =~ \ ${container_path}\  ]]; then
+              changed_containers+=("${container_path}")
+            fi
+          fi
+        done <<< "$changed_files"
+
+        if [ ${#changed_containers[@]} -eq 0 ]; then
+          echo "No container changes detected"
+          echo "pr_changed_containers=" >> "$GITHUB_OUTPUT"
+        else
+          # Join array with commas
+          IFS=','
+          changed_containers_filter="${changed_containers[*]}"
+          echo "Changed containers detected: $changed_containers_filter"
+          echo "pr_changed_containers=$changed_containers_filter" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Generate container matrix
+      id: generate-matrix
+      shell: bash
+      env:
+        EVENT_TYPE: ${{ inputs.event_type }}
+        CHANGED_FILES: ${{ inputs.changed_files }}
+        CONTAINERS_FILTER: ${{ inputs.containers_filter }}
+        FORCE_ALL: ${{ inputs.force_all }}
+        INCLUDE_DEV_VERSIONS: ${{ inputs.include_dev_versions }}
+        PR_CHANGED_CONTAINERS: ${{ steps.detect-pr-changes.outputs.pr_changed_containers }}
+      run: |
+        set -euo pipefail
+
+        echo "=== Container Discovery Configuration ==="
+        echo "Event type: $EVENT_TYPE"
+        echo "Force all: $FORCE_ALL"
+        echo "Include dev versions: $INCLUDE_DEV_VERSIONS"
+        echo "Manual filter: $CONTAINERS_FILTER"
+        echo "PR changed containers: $PR_CHANGED_CONTAINERS"
+        echo "============================================"
+
+        # Initialize containers array
+        containers=()
+
+        # Determine discovery method based on event type and inputs
+        if [[ "$EVENT_TYPE" == "pull_request" && -n "${PR_CHANGED_CONTAINERS:-}" ]]; then
+          echo "Using PR-detected changed containers: ${PR_CHANGED_CONTAINERS}"
+          IFS=',' read -ra FILTER_ARRAY <<< "${PR_CHANGED_CONTAINERS}"
+          for filter in "${FILTER_ARRAY[@]}"; do
+            filter=$(echo "$filter" | xargs) # trim whitespace
+            mapfile -t found_containers < <(find library -name "Dockerfile" -type f | grep -E "library/${filter}/Dockerfile$" | sed 's|/Dockerfile||g' | sort)
+            containers+=("${found_containers[@]}")
+          done
+        elif [[ -n "${CONTAINERS_FILTER:-}" ]]; then
+          echo "Using manual container filter: ${CONTAINERS_FILTER}"
+          IFS=',' read -ra FILTER_ARRAY <<< "${CONTAINERS_FILTER}"
+          for filter in "${FILTER_ARRAY[@]}"; do
+            filter=$(echo "$filter" | xargs) # trim whitespace
+            mapfile -t found_containers < <(find library -name "Dockerfile" -type f | grep -E "library/$filter/[^/]+/[^/]+/Dockerfile$" | sed 's|/Dockerfile||g' | sort)
+            containers+=("${found_containers[@]}")
+          done
+        elif [[ "$EVENT_TYPE" == "push" && -n "${CHANGED_FILES:-}" && "$FORCE_ALL" != "true" ]]; then
+          echo "Discovering containers from changed files for push event"
+          for file in $CHANGED_FILES; do
+            # Extract container path pattern: library/{app}/{version}/{platform}
+            if [[ "$file" =~ ^library/([^/]+)/([^/]+)/([^/]+)/ ]]; then
+              container_path="library/${BASH_REMATCH[1]}/${BASH_REMATCH[2]}/${BASH_REMATCH[3]}"
+              if [[ -f "$container_path/Dockerfile" ]]; then
+                containers+=("$container_path")
+              fi
+            fi
+          done
+        else
+          echo "Discovering all containers (force_all=$FORCE_ALL or event_type=$EVENT_TYPE)"
+          mapfile -t containers < <(find library -name "Dockerfile" -type f | grep -E "library/[^/]+/[^/]+/[^/]+/Dockerfile$" | sed 's|/Dockerfile||g' | sort)
+        fi
+
+        # Filter out development versions if requested
+        if [[ "$INCLUDE_DEV_VERSIONS" != "true" ]]; then
+          echo "Filtering out development versions..."
+          filtered_containers=()
+          for container in "${containers[@]}"; do
+            version=$(echo "${container}" | cut -d'/' -f3)
+            # Only include stable versions (not dev, alpha, beta, rc, snapshot)
+            if [[ ! "$version" =~ (dev|alpha|beta|rc|snapshot) ]]; then
+              filtered_containers+=("$container")
+            else
+              echo "Excluding development version: $container"
+            fi
+          done
+          containers=("${filtered_containers[@]}")
+        fi
+
+        # Remove duplicates and create matrix
+        if [[ ${#containers[@]} -gt 0 ]]; then
+          mapfile -t unique_containers < <(printf "%s\n" "${containers[@]}" | sort -u)
+          echo "Found containers to process: ${unique_containers[*]}"
+          
+          # Generate JSON matrix
+          matrix_json="["
+          for i in "${!unique_containers[@]}"; do
+            container="${unique_containers[$i]}"
+            app_name=$(echo "${container}" | cut -d'/' -f2)
+            version=$(echo "${container}" | cut -d'/' -f3)
+            platform=$(echo "${container}" | cut -d'/' -f4)
+            
+            if [[ $i -gt 0 ]]; then
+              matrix_json+=","
+            fi
+            
+            matrix_json+="{\"container\":\"${container}\",\"app\":\"${app_name}\",\"version\":\"${version}\",\"platform\":\"${platform}\"}"
+          done
+          matrix_json+="]"
+          
+          echo "matrix={\"include\":$matrix_json}" >> "$GITHUB_OUTPUT"
+          echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          echo "container_count=${#unique_containers[@]}" >> "$GITHUB_OUTPUT"
+          
+          echo "Generated matrix: $matrix_json"
+          echo "Container count: ${#unique_containers[@]}"
+        else
+          echo "No containers found to process"
+          echo "matrix={\"include\":[]}" >> "$GITHUB_OUTPUT"
+          echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          echo "container_count=0" >> "$GITHUB_OUTPUT"
+        fi

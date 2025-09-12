@@ -59,8 +59,9 @@ jobs:
   discover-containers:
     runs-on: ubuntu-latest
     outputs:
-      matrix: ${{ steps.generate-matrix.outputs.matrix }}
-      has_changes: ${{ steps.generate-matrix.outputs.has_changes }}
+      matrix: ${{ steps.discover.outputs.matrix }}
+      has_changes: ${{ steps.discover.outputs.has_changes }}
+      container_count: ${{ steps.discover.outputs.container_count }}
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
@@ -106,76 +107,16 @@ jobs:
             echo "changed_containers_filter=$changed_containers_filter" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Generate container matrix for security scanning
-        id: generate-matrix
-        env:
-          CONTAINERS_FILTER: ${{ github.event.inputs.containers_filter }}
-          PR_CHANGED_CONTAINERS: ${{ steps.detect-changes.outputs.changed_containers_filter }}
-        run: |
-          set -euo pipefail
-
-          # Initialize containers array
-          containers=()
-
-          # For PR events, prioritize changed containers over manual filter
-          if [[ "${{ github.event_name }}" == "pull_request" && -n "${PR_CHANGED_CONTAINERS:-}" ]]; then
-            echo "Using PR-detected changed containers: ${PR_CHANGED_CONTAINERS}"
-            IFS=',' read -ra FILTER_ARRAY <<< "${PR_CHANGED_CONTAINERS}"
-            for filter in "${FILTER_ARRAY[@]}"; do
-              mapfile -t found_containers < <(find library -name "Dockerfile" -type f | grep -E "library/${filter}/Dockerfile$" | sed 's|/Dockerfile||g' | sort)
-              containers+=("${found_containers[@]}")
-            done
-          elif [[ -n "${CONTAINERS_FILTER:-}" ]]; then
-            echo "Using manual container filter: ${CONTAINERS_FILTER}"
-            IFS=',' read -ra FILTER_ARRAY <<< "${CONTAINERS_FILTER}"
-            for filter in "${FILTER_ARRAY[@]}"; do
-              filter=$(echo "$filter" | xargs) # trim whitespace
-              mapfile -t found_containers < <(find library -name "Dockerfile" -type f | grep -E "library/${filter}/[^/]+/[^/]+/Dockerfile$" | sed 's|/Dockerfile||g' | sort)
-              containers+=("${found_containers[@]}")
-            done
-          else
-            echo "Discovering all containers for security scanning"
-            mapfile -t containers < <(find library -name "Dockerfile" -type f | grep -E "library/[^/]+/[^/]+/[^/]+/Dockerfile$" | sed 's|/Dockerfile||g' | sort)
-          fi
-
-          # Filter to production-ready images only (exclude development tags)
-          production_containers=()
-          for container in "${containers[@]}"; do
-            version=$(echo "${container}" | cut -d'/' -f3)
-            # Only include stable versions (not dev, alpha, beta, rc)
-            if [[ ! "$version" =~ (dev|alpha|beta|rc|snapshot) ]]; then
-              production_containers+=("$container")
-            fi
-          done
-
-          # Create matrix from production containers
-          if [[ ${#production_containers[@]} -gt 0 ]]; then
-            mapfile -t unique_containers < <(printf "%s\n" "${production_containers[@]}" | sort -u)
-            echo "Found production containers to scan: ${unique_containers[*]}"
-            
-            # Generate JSON matrix
-            matrix_json="["
-            for i in "${!unique_containers[@]}"; do
-              container="${unique_containers[$i]}"
-              app_name=$(echo "${container}" | cut -d'/' -f2)
-              version=$(echo "${container}" | cut -d'/' -f3)
-              platform=$(echo "${container}" | cut -d'/' -f4)
-              
-              if [[ $i -gt 0 ]]; then
-                matrix_json+=","
-              fi
-              
-              matrix_json+="{\"container\":\"${container}\",\"app\":\"${app_name}\",\"version\":\"${version}\",\"platform\":\"${platform}\"}"
-            done
-            matrix_json+="]"
-            
-            echo "matrix=${matrix_json}" >> "$GITHUB_OUTPUT"
-            echo "has_changes=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "No containers found to scan"
-            echo "matrix=[]" >> "$GITHUB_OUTPUT"
-            echo "has_changes=false" >> "$GITHUB_OUTPUT"
-          fi
+      - name: Discover containers using composite action
+        id: discover
+        uses: ./.github/actions/discover-containers
+        with:
+          event_type: ${{ github.event_name }}
+          changed_files: ${{ steps.detect-changes.outputs.changed_containers_filter }}
+          containers_filter: ${{ github.event.inputs.containers_filter }}
+          force_all: ${{ github.event_name == 'schedule' }}
+          include_dev_versions: "false" # Security scans focus on production versions
+          base_ref: ${{ github.base_ref || 'main' }}
 
   security-scan:
     runs-on: ubuntu-latest

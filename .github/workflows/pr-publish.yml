@@ -128,8 +128,9 @@ jobs:
     needs: [pr-info-and-security]
     if: needs.pr-info-and-security.outputs.approved == 'true'
     outputs:
-      matrix: ${{ steps.generate-matrix.outputs.matrix }}
-      has_changes: ${{ steps.generate-matrix.outputs.has_changes }}
+      matrix: ${{ steps.discover.outputs.matrix }}
+      has_changes: ${{ steps.discover.outputs.has_changes }}
+      container_count: ${{ steps.discover.outputs.container_count }}
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
@@ -154,67 +155,20 @@ jobs:
           echo "Changed files:"
           echo "$changed_files"
 
-          # Set output for the matrix generation step
-          {
-            echo "changed_files<<EOF"
-            echo "$changed_files"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
+          # Convert to space-separated for composite action
+          changed_files_space=$(echo "$changed_files" | tr '\n' ' ' | sed 's/[[:space:]]*$//')
+          echo "changed_files_space=$changed_files_space" >> "$GITHUB_OUTPUT"
 
-      - name: Generate build matrix
-        id: generate-matrix
-        run: |
-          set -euo pipefail
-
-          changed_files="${{ steps.changed-files.outputs.changed_files }}"
-
-          echo "Debug: Changed files:"
-          echo "$changed_files"
-
-          # Initialize containers array
-          containers=()
-
-          echo "Discovering containers from changed files"
-
-          # Process changed files
-          while IFS= read -r file; do
-            if [[ -n "$file" && "$file" =~ ^library/([^/]+)/([^/]+)/([^/]+)/ ]]; then
-              container_path="library/${BASH_REMATCH[1]}/${BASH_REMATCH[2]}/${BASH_REMATCH[3]}"
-              if [[ -f "$container_path/Dockerfile" ]]; then
-                containers+=("$container_path")
-              fi
-            fi
-          done <<< "$changed_files"
-
-          # Remove duplicates and create matrix
-          if [[ ${#containers[@]} -gt 0 ]]; then
-            mapfile -t unique_containers < <(printf "%s\n" "${containers[@]}" | sort -u)
-            echo "Found containers to build: ${unique_containers[*]}"
-            
-            # Generate JSON matrix
-            matrix_json="["
-            for i in "${!unique_containers[@]}"; do
-              container="${unique_containers[$i]}"
-              app_name=$(echo "$container" | cut -d'/' -f2)
-              version=$(echo "$container" | cut -d'/' -f3)
-              platform=$(echo "$container" | cut -d'/' -f4)
-              
-              if [[ $i -gt 0 ]]; then
-                matrix_json+=","
-              fi
-              
-              matrix_json+="{\"container\":\"$container\",\"app\":\"$app_name\",\"version\":\"$version\",\"platform\":\"$platform\"}"
-            done
-            matrix_json+="]"
-            
-            echo "matrix={\"include\":$matrix_json}" >> "$GITHUB_OUTPUT"
-            echo "has_changes=true" >> "$GITHUB_OUTPUT"
-            echo "Generated matrix: $matrix_json"
-          else
-            echo "No containers found to build"
-            echo "matrix={\"include\":[]}" >> "$GITHUB_OUTPUT"
-            echo "has_changes=false" >> "$GITHUB_OUTPUT"
-          fi
+      - name: Discover containers using composite action
+        id: discover
+        uses: ./.github/actions/discover-containers
+        with:
+          event_type: "pull_request"
+          changed_files: ${{ steps.changed-files.outputs.changed_files_space }}
+          containers_filter: ""
+          force_all: "false"
+          include_dev_versions: "true"
+          base_ref: "main"
 
   # Build, test and publish container images
   build-and-publish:
@@ -315,23 +269,26 @@ jobs:
           echo "  Image: ${image_name}"
           echo "  Tags: ${tags}"
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
-        id: build
+      - name: Build and publish PR container
+        id: build-publish
+        uses: ./.github/actions/docker-build
         with:
-          context: ${{ matrix.container }}
-          file: ${{ matrix.container }}/Dockerfile
-          platforms: ${{ env.BUILD_PLATFORMS }}
-          push: true
-          tags: ${{ steps.build-metadata.outputs.tags }}
-          labels: ${{ steps.build-metadata.outputs.labels }}
-          cache-from: type=gha,scope=build-${{ matrix.app }}-${{ matrix.version }}-${{ matrix.platform }}
-          cache-to: type=gha,mode=max,scope=build-${{ matrix.app }}-${{ matrix.version }}-${{ matrix.platform }}
+          container_path: ${{ matrix.container }}
+          image_tags: ${{ steps.build-metadata.outputs.tags }}
+          image_labels: ${{ steps.build-metadata.outputs.labels }}
+          build_platforms: ${{ env.BUILD_PLATFORMS }}
+          push_image: "true"
+          load_image: "false"
+          cache_scope: build-${{ matrix.app }}-${{ matrix.version }}-${{ matrix.platform }}
+          registry_username: ${{ github.actor }}
+          registry_password: ${{ secrets.GITHUB_TOKEN }}
+          enable_security_scan: "true"
+          enable_attestations: "true"
 
       - name: Generate SBOM
         uses: anchore/sbom-action@da167eac915b4e86f08b264dbdbc867b61be6f0c # v0.20.5
         with:
-          image: ${{ steps.build-metadata.outputs.image_name }}@${{ steps.build.outputs.digest }}
+          image: ${{ steps.build-metadata.outputs.image_name }}@${{ steps.build-publish.outputs.image_digest }}
           format: spdx-json
           output-file: sbom.spdx.json
 
@@ -344,7 +301,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          image_ref="${{ steps.build-metadata.outputs.image_name }}@${{ steps.build.outputs.digest }}"
+          image_ref="${{ steps.build-metadata.outputs.image_name }}@${{ steps.build-publish.outputs.image_digest }}"
           echo "🔏 Signing container image: $image_ref"
 
           # Sign the image
@@ -379,7 +336,7 @@ jobs:
       - name: Run security scan with Trivy
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # master
         with:
-          image-ref: ${{ steps.build-metadata.outputs.image_name }}@${{ steps.build.outputs.digest }}
+          image-ref: ${{ steps.build-metadata.outputs.image_name }}@${{ steps.build-publish.outputs.image_digest }}
           format: "sarif"
           output: "trivy-results.sarif"
 
