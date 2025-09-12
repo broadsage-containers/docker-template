@@ -81,8 +81,7 @@ In addition to following this Code of Conduct, we encourage all community member
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the community leaders responsible for enforcement at
-[conduct@broadsage.com](mailto:conduct@broadsage.com).
+reported to the community leaders responsible for enforcement. See our [Communication Guide](docs/communication.md#-email-contacts) for the appropriate contact information.
 All complaints will be reviewed and investigated promptly and fairly.
 
 All community leaders are obligated to respect the privacy and security of the
@@ -99,7 +98,7 @@ When reporting an incident, please include:
 
 Reports can be made:
 
-- Via email to [conduct@broadsage.com](mailto:conduct@broadsage.com)
+- Via appropriate channels listed in our [Communication Guide](docs/communication.md#-email-contacts)
 - Through private messages to project maintainers
 - For urgent matters requiring immediate attention, contact multiple maintainers
 
@@ -115,7 +114,7 @@ All reports will be handled with strict confidentiality. Information will only b
 
 ## Appeals Process
 
-If you believe you have been falsely or unfairly accused of violating this Code of Conduct, you may appeal the decision by contacting the project maintainers at [conduct@broadsage.com](mailto:conduct@broadsage.com) with a concise description of your grievance. Appeals will be handled by individuals who were not involved in the original incident or decision.
+If you believe you have been falsely or unfairly accused of violating this Code of Conduct, you may appeal the decision by contacting the project maintainers. See our [Communication Guide](docs/communication.md#-email-contacts) for the appropriate contact information. Appeals will be handled by individuals who were not involved in the original incident or decision.
 
 ## No Retaliation
 

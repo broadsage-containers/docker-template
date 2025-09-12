@@ -194,8 +194,11 @@ See our [Contributing Guide](../../CONTRIBUTING.md) for details on how to partic
 
 ### 🐛 Issues & Support
 
-- **Bug Reports**: [GitHub Issues](https://github.com/broadsage/containers/issues)
-- **Feature Requests**: [GitHub Discussions](https://github.com/broadsage/containers/discussions)
+For all support options, reporting channels, and community resources, see our [Communication Guide](../../docs/communication.md).
+
+**Quick Links:**
+
+- **Bug Reports & Feature Requests**: See communication guide for appropriate channels
 - **Security Issues**: See [SECURITY.md](../../SECURITY.md)
 
 ### 🏷️ Versioning & Releases

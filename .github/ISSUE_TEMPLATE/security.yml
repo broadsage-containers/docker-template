@@ -17,9 +17,9 @@ body:
 
         For security vulnerabilities, please follow our responsible disclosure process:
 
-        1. **Private Reporting:** Use GitHub's private vulnerability reporting feature
-        2. **Security Email:** Send details to security@broadsage.com
-        3. **Security Policy:** Review our complete [Security Policy](../SECURITY.md)
+        1. **Security Policy:** Review our complete [Security Policy](../SECURITY.md)
+        2. **Contact Information:** See our [Communication Guide](../docs/communication.md) for security reporting details
+        3. **Private Reporting:** Use the appropriate secure channels listed in the communication guide
 
         ---
 

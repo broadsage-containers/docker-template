@@ -163,6 +163,15 @@ We use **Make** for build automation:
 
 ## 🤝 Contributing
 
+We welcome contributions from the community! See our [Contributing Guide](CONTRIBUTORS.md) for detailed information on how to get started.
+
+### Quick Start for Contributors
+
+1. **Read the Guidelines**: Start with [CONTRIBUTORS.md](CONTRIBUTORS.md)
+2. **Check Communication Channels**: See [docs/communication.md](docs/communication.md)
+3. **Follow Our Standards**: Review coding and PR conventions below
+4. **Join the Community**: See our [Communication Guide](docs/communication.md) for all community channels
+
 ### Pull Request Requirements
 
 All PRs must follow our conventions:
