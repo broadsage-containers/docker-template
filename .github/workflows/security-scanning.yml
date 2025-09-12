@@ -6,8 +6,10 @@ name: "[Security] Comprehensive Scanning Pipeline"
 
 on:
   schedule:
-    # Run daily security scans at 2 AM UTC
-    - cron: "0 2 * * *"
+    # Run weekly security scans on Sundays at 2 AM UTC
+    - cron: "0 2 * * 0"
+    # Run monthly SBOM generation on the 1st of each month at 2 AM UTC
+    - cron: "0 2 1 * *"
   workflow_dispatch:
     inputs:
       containers_filter:
@@ -57,8 +59,9 @@ jobs:
   discover-containers:
     runs-on: ubuntu-latest
     outputs:
-      matrix: ${{ steps.generate-matrix.outputs.matrix }}
-      has_changes: ${{ steps.generate-matrix.outputs.has_changes }}
+      matrix: ${{ steps.discover.outputs.matrix }}
+      has_changes: ${{ steps.discover.outputs.has_changes }}
+      container_count: ${{ steps.discover.outputs.container_count }}
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
@@ -104,79 +107,30 @@ jobs:
             echo "changed_containers_filter=$changed_containers_filter" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Generate container matrix for security scanning
-        id: generate-matrix
-        env:
-          CONTAINERS_FILTER: ${{ github.event.inputs.containers_filter }}
-          PR_CHANGED_CONTAINERS: ${{ steps.detect-changes.outputs.changed_containers_filter }}
-        run: |
-          set -euo pipefail
-
-          # Initialize containers array
-          containers=()
-
-          # For PR events, prioritize changed containers over manual filter
-          if [[ "${{ github.event_name }}" == "pull_request" && -n "${PR_CHANGED_CONTAINERS:-}" ]]; then
-            echo "Using PR-detected changed containers: ${PR_CHANGED_CONTAINERS}"
-            IFS=',' read -ra FILTER_ARRAY <<< "${PR_CHANGED_CONTAINERS}"
-            for filter in "${FILTER_ARRAY[@]}"; do
-              mapfile -t found_containers < <(find library -name "Dockerfile" -type f | grep -E "library/${filter}/Dockerfile$" | sed 's|/Dockerfile||g' | sort)
-              containers+=("${found_containers[@]}")
-            done
-          elif [[ -n "${CONTAINERS_FILTER:-}" ]]; then
-            echo "Using manual container filter: ${CONTAINERS_FILTER}"
-            IFS=',' read -ra FILTER_ARRAY <<< "${CONTAINERS_FILTER}"
-            for filter in "${FILTER_ARRAY[@]}"; do
-              filter=$(echo "$filter" | xargs) # trim whitespace
-              mapfile -t found_containers < <(find library -name "Dockerfile" -type f | grep -E "library/${filter}/[^/]+/[^/]+/Dockerfile$" | sed 's|/Dockerfile||g' | sort)
-              containers+=("${found_containers[@]}")
-            done
-          else
-            echo "Discovering all containers for security scanning"
-            mapfile -t containers < <(find library -name "Dockerfile" -type f | grep -E "library/[^/]+/[^/]+/[^/]+/Dockerfile$" | sed 's|/Dockerfile||g' | sort)
-          fi
-
-          # Create matrix
-          if [[ ${#containers[@]} -gt 0 ]]; then
-            mapfile -t unique_containers < <(printf "%s\n" "${containers[@]}" | sort -u)
-            echo "Found containers to scan: ${unique_containers[*]}"
-            
-            # Generate JSON matrix
-            matrix_json="["
-            for i in "${!unique_containers[@]}"; do
-              container="${unique_containers[$i]}"
-              app_name=$(echo "${container}" | cut -d'/' -f2)
-              version=$(echo "${container}" | cut -d'/' -f3)
-              platform=$(echo "${container}" | cut -d'/' -f4)
-              
-              if [[ $i -gt 0 ]]; then
-                matrix_json+=","
-              fi
-              
-              matrix_json+="{\"container\":\"${container}\",\"app\":\"${app_name}\",\"version\":\"${version}\",\"platform\":\"${platform}\"}"
-            done
-            matrix_json+="]"
-            
-            echo "matrix=${matrix_json}" >> "$GITHUB_OUTPUT"
-            echo "has_changes=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "No containers found to scan"
-            echo "matrix=[]" >> "$GITHUB_OUTPUT"
-            echo "has_changes=false" >> "$GITHUB_OUTPUT"
-          fi
+      - name: Discover containers using composite action
+        id: discover
+        uses: ./.github/actions/discover-containers
+        with:
+          event_type: ${{ github.event_name }}
+          changed_files: ${{ steps.detect-changes.outputs.changed_containers_filter }}
+          containers_filter: ${{ github.event.inputs.containers_filter }}
+          force_all: ${{ github.event_name == 'schedule' }}
+          include_dev_versions: "false" # Security scans focus on production versions
+          base_ref: ${{ github.base_ref || 'main' }}
 
   security-scan:
     runs-on: ubuntu-latest
     needs: discover-containers
     if: needs.discover-containers.outputs.has_changes == 'true'
+    timeout-minutes: 30
     strategy:
       # Don't fail fast - we want all scans to complete even if some fail
       fail-fast: false
-      # Limit concurrent jobs to prevent resource exhaustion
-      max-parallel: 4
+      # Increase concurrent jobs for faster completion
+      max-parallel: 6
       matrix:
         containers: ${{ fromJson(needs.discover-containers.outputs.matrix) }}
-        scanner: [trivy, syft]
+        scanner: [trivy]
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
@@ -203,9 +157,34 @@ jobs:
           if docker manifest inspect "$image" >/dev/null 2>&1; then
             echo "Image exists: $image"
             echo "exists=true" >> "$GITHUB_OUTPUT"
+            
+            # Check if image was recently scanned (for scheduled runs)
+            if [[ "${{ github.event_name }}" == "schedule" ]]; then
+              # Get image creation date
+              created_date=$(docker manifest inspect "$image" | jq -r '.history[0].v1Compatibility' | jq -r '.created' 2>/dev/null || echo "")
+              if [[ -n "$created_date" ]]; then
+                created_timestamp=$(date -d "$created_date" +%s 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%S" "${created_date%.*}" +%s 2>/dev/null || echo "0")
+                current_timestamp=$(date +%s)
+                age_days=$(( (current_timestamp - created_timestamp) / 86400 ))
+                
+                # Skip scanning images older than 30 days on scheduled runs
+                if [[ $age_days -gt 30 ]]; then
+                  echo "Image is $age_days days old - skipping scheduled scan of older image"
+                  echo "skip_old_image=true" >> "$GITHUB_OUTPUT"
+                else
+                  echo "Image is $age_days days old - proceeding with scan"
+                  echo "skip_old_image=false" >> "$GITHUB_OUTPUT"
+                fi
+              else
+                echo "skip_old_image=false" >> "$GITHUB_OUTPUT"
+              fi
+            else
+              echo "skip_old_image=false" >> "$GITHUB_OUTPUT"
+            fi
           else
             echo "Image does not exist: $image"
             echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "skip_old_image=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Skip scanning - image not found
@@ -214,33 +193,72 @@ jobs:
           echo "⚠️ Skipping security scan for ${{ matrix.containers.app }}:${{ matrix.containers.version }}-${{ matrix.containers.platform }} - image not found in registry"
           echo "This may be expected if the image hasn't been built and pushed yet."
 
+      - name: Skip scanning - old image on scheduled run
+        if: steps.check-image.outputs.skip_old_image == 'true'
+        run: |
+          echo "⚠️ Skipping security scan for ${{ matrix.containers.app }}:${{ matrix.containers.version }}-${{ matrix.containers.platform }} - image is older than 30 days"
+          echo "Scheduled scans focus on recently updated images only."
+
       - name: Run Trivy vulnerability scanner
-        if: matrix.scanner == 'trivy' && steps.check-image.outputs.exists == 'true'
+        if: matrix.scanner == 'trivy' && steps.check-image.outputs.exists == 'true' && steps.check-image.outputs.skip_old_image == 'false'
         uses: aquasecurity/trivy-action@062f2592684a31eb3aa050cc61e7ca1451cecd3d # v0.18.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.containers.app }}:${{ matrix.containers.version }}-${{ matrix.containers.platform }}
           format: "sarif"
           output: "trivy-results.sarif"
-          severity: "CRITICAL,HIGH,MEDIUM,LOW"
+          severity: "CRITICAL,HIGH"
+          timeout: "10m"
+
+      - name: Upload SARIF results
+        if: steps.check-image.outputs.exists == 'true' && steps.check-image.outputs.skip_old_image == 'false'
+        uses: github/codeql-action/upload-sarif@df409f7d9260372bd5f19e5b04e83cb3c43714ae # v3.27.9
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy-security-scan
+
+      - name: Upload security scan results
+        if: always() && steps.check-image.outputs.exists == 'true' && steps.check-image.outputs.skip_old_image == 'false'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: security-scan-results-${{ matrix.containers.app }}-${{ matrix.containers.version }}-${{ matrix.containers.platform }}
+          path: trivy-results.sarif
+
+  # Monthly SBOM generation job
+  generate-sbom:
+    runs-on: ubuntu-latest
+    needs: discover-containers
+    if: needs.discover-containers.outputs.has_changes == 'true' && github.event_name == 'schedule' && startsWith(github.event.schedule, '0 2 1')
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        containers: ${{ fromJson(needs.discover-containers.outputs.matrix) }}
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Generate SBOM with Syft
-        if: matrix.scanner == 'syft' && steps.check-image.outputs.exists == 'true'
         uses: anchore/sbom-action@d94f46e13c6c62f59525ac9a1e147a99dc0b9bf5 # v0.17.0
         with:
           image: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.containers.app }}:${{ matrix.containers.version }}-${{ matrix.containers.platform }}
           format: spdx-json
-          output-file: sbom.spdx.json
+          output-file: sbom-${{ matrix.containers.app }}-${{ matrix.containers.version }}-${{ matrix.containers.platform }}.spdx.json
 
-      - name: Upload SARIF results
-        if: matrix.scanner != 'syft' && steps.check-image.outputs.exists == 'true'
-        uses: github/codeql-action/upload-sarif@df409f7d9260372bd5f19e5b04e83cb3c43714ae # v3.27.9
-        with:
-          sarif_file: ${{ matrix.scanner }}-results.sarif
-          category: ${{ matrix.scanner }}-security-scan
-
-      - name: Upload security scan results
-        if: always()
+      - name: Upload SBOM
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: security-scan-results-${{ matrix.containers.container }}-${{ matrix.scanner }}
-          path: security-scan-results/
+          name: sbom-${{ matrix.containers.app }}-${{ matrix.containers.version }}-${{ matrix.containers.platform }}
+          path: sbom-${{ matrix.containers.app }}-${{ matrix.containers.version }}-${{ matrix.containers.platform }}.spdx.json

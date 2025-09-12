@@ -6,45 +6,47 @@ SPDX-License-Identifier: Apache-2.0
 
 # containers
 
-Primary source of truth for the Broadsage Container Images
+[![GitHub license](https://img.shields.io/github/license/broadsage/containers)](LICENSE)
+[![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-%23FE5196?logo=conventionalcommits&logoColor=white)](https://conventionalcommits.org)
+[![REUSE compliance](https://img.shields.io/reuse/compliance/github.com%2Fbroadsage%2Fcontainers)](https://reuse.software/)
+[![Security Scanning](https://img.shields.io/badge/security-scanned-green)](SECURITY.md)
+
+Primary source of truth for Broadsage Containers
 
 ## 🚀 Quick Start
 
-This project uses **Task** for all build, test, and deployment operations.
+This project provides container images with build automation using Make.
 
 ### Prerequisites
 
 ```bash
-# Install Task
-brew install go-task/tap/go-task
+# Verify make is installed
+make --version
 
-# Verify installation
-task --version
+# Verify docker is installed
+docker --version
 ```
 
 ### Common Commands
 
 ```bash
 # Show all available commands
-task --list
+make help
 
 # Build a container
-task build CONTAINER=nginx
-
-# Build all containers  
-task build
+make build CONTAINER=nginx
 
 # Test containers
-task test CONTAINER=nginx
+make test CONTAINER=nginx
 
 # Development workflow (build + test)
-task dev CONTAINER=nginx
+make dev CONTAINER=nginx
 
 # Full CI pipeline
-task ci
+make ci
 
 # Clean up
-task clean
+make clean
 ```
 
 ## 📁 Project Structure
@@ -52,11 +54,10 @@ task clean
 ```bash
 containers/
 ├── .github/workflows/     # CI/CD pipelines
-├── broadsage/            # Container definitions
+├── library/              # Container definitions
 │   └── nginx/           # NGINX container
-├── templates/           # Container templates
-├── Taskfile.yml        # 🎯 Build automation (Task)
-├── MIGRATION_FROM_BASH.md  # Migration guide
+├── scripts/             # Build and utility scripts
+├── Makefile            # 🎯 Build automation
 └── README.md           # This file
 ```
 
@@ -65,46 +66,42 @@ containers/
 ### Build Single Container
 
 ```bash
-task build CONTAINER=nginx
+make build CONTAINER=nginx
 ```
 
 ### Test Single Container
 
 ```bash
-task test CONTAINER=nginx
+make test CONTAINER=nginx
 ```
 
 ### Security Scan
 
 ```bash
-task security CONTAINER=nginx
+make security CONTAINER=nginx
 ```
 
 ### Lint Dockerfiles
 
 ```bash
-task lint
+make lint
 ```
 
-## 🚀 Why Task?
+## �️ Build System
 
-We migrated from bash scripts to Task for:
+We use **Make** for build automation:
 
-- ✅ **Modern syntax** - YAML instead of complex bash
 - ✅ **Cross-platform** - Works on macOS, Linux, Windows
-- ✅ **Better performance** - Built-in parallelization
-- ✅ **Superior DX** - IDE integration and auto-completion
-- ✅ **Maintainability** - Self-documenting with clear structure
-
-See `MIGRATION_FROM_BASH.md` for detailed migration information.
+- ✅ **Simple syntax** - Easy to understand and maintain  
+- ✅ **Standard tooling** - No additional dependencies required
+- ✅ **Proven reliability** - Time-tested build system
+- ✅ **IDE integration** - Built-in support in most editors
 
 ## 📚 Documentation
 
-- [Task Documentation](https://taskfile.dev/)
-- [Container Templates](./templates/README.md)
-- [Migration Guide](./MIGRATION_FROM_BASH.md)
-- **[🎯 Conventional Commits Guide](./docs/CONVENTIONAL_COMMITS.md)** - PR title requirements
-- **[🌿 Branch Naming Guide](./docs/branch_naming.md)** - Branch naming conventions
+- [Contributing Guidelines](CONTRIBUTING.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Security Policy](SECURITY.md)
 
 ## 🤝 Contributing
 

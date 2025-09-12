@@ -1,0 +1,181 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage <opensource@broadsage.com>
+# SPDX-License-Identifier: Apache-2.0
+
+---
+name: "Generate Build Metadata"
+description: "Generates Docker build metadata including tags, labels, and image names"
+
+inputs:
+  container_path:
+    description: "Path to the container (e.g., library/nginx/1.29/debian-12)"
+    required: true
+  app_name:
+    description: "Application name (e.g., nginx)"
+    required: true
+  version:
+    description: "Version (e.g., 1.29)"
+    required: true
+  platform:
+    description: "Platform (e.g., debian-12)"
+    required: true
+  registry:
+    description: "Container registry"
+    required: false
+    default: "ghcr.io"
+  image_namespace:
+    description: "Image namespace/organization"
+    required: true
+  event_name:
+    description: "GitHub event name"
+    required: true
+  ref:
+    description: "GitHub ref"
+    required: true
+  sha:
+    description: "GitHub SHA"
+    required: true
+  is_production:
+    description: "Whether this is a production build"
+    required: false
+    default: "false"
+
+outputs:
+  image_name:
+    description: "Full image name without tags"
+    value: ${{ steps.generate-metadata.outputs.image_name }}
+  tags:
+    description: "Comma-separated list of image tags"
+    value: ${{ steps.generate-metadata.outputs.tags }}
+  primary_tag:
+    description: "Primary image tag for testing and single-tag usage"
+    value: ${{ steps.generate-metadata.outputs.primary_tag }}
+  labels:
+    description: "Comma-separated list of OCI labels"
+    value: ${{ steps.generate-metadata.outputs.labels }}
+  digest_tags:
+    description: "Tags suitable for digest-based references"
+    value: ${{ steps.generate-metadata.outputs.digest_tags }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Generate build metadata
+      id: generate-metadata
+      shell: bash
+      env:
+        CONTAINER: ${{ inputs.container_path }}
+        APP: ${{ inputs.app_name }}
+        VERSION: ${{ inputs.version }}
+        PLATFORM: ${{ inputs.platform }}
+        REGISTRY: ${{ inputs.registry }}
+        IMAGE_NAMESPACE: ${{ inputs.image_namespace }}
+        EVENT_NAME: ${{ inputs.event_name }}
+        REF: ${{ inputs.ref }}
+        SHA: ${{ inputs.sha }}
+        IS_PRODUCTION: ${{ inputs.is_production }}
+      run: |
+        set -euo pipefail
+
+        echo "=== Build Metadata Generation ==="
+        echo "Container: $CONTAINER"
+        echo "App: $APP"
+        echo "Version: $VERSION"
+        echo "Platform: $PLATFORM"
+        echo "Registry: $REGISTRY"
+        echo "Namespace: $IMAGE_NAMESPACE"
+        echo "Event: $EVENT_NAME"
+        echo "Is Production: $IS_PRODUCTION"
+        echo "================================="
+
+        # Generate image name
+        image_name="${REGISTRY}/${IMAGE_NAMESPACE}/${APP}"
+
+        # Generate tags based on build type
+        if [[ "$IS_PRODUCTION" == "true" && "$EVENT_NAME" == "push" && "$REF" == "refs/heads/main" ]]; then
+          echo "Generating production tags for main branch"
+          
+          # Production tags for main branch
+          tags="${image_name}:${VERSION}-${PLATFORM}"
+          tags="${tags},${image_name}:${VERSION}"
+          
+          # Add major version tag if version follows semver pattern
+          if [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+ ]]; then
+            major_version=$(echo "${VERSION}" | cut -d'.' -f1)
+            tags="${tags},${image_name}:${major_version}"
+          fi
+          
+          # Add latest tag for stable versions
+          if [[ ! "${VERSION}" =~ (dev|alpha|beta|rc|snapshot) ]]; then
+            tags="${tags},${image_name}:latest"
+          fi
+          
+        elif [[ "$EVENT_NAME" == "workflow_dispatch" && "$IS_PRODUCTION" == "true" ]]; then
+          echo "Generating manual production tags"
+          tags="${image_name}:${VERSION}-${PLATFORM}"
+          tags="${tags},${image_name}:${VERSION}"
+          
+        else
+          echo "Generating development tags"
+          
+          # Development tags for other events
+          short_sha=$(echo "$SHA" | cut -c1-7)
+          
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            tags="${image_name}:pr-${VERSION}-${PLATFORM}-${short_sha}"
+            tags="${tags},${image_name}:pr-${short_sha}"
+          else
+            tags="${image_name}:dev-${VERSION}-${PLATFORM}-${short_sha}"
+            tags="${tags},${image_name}:dev-${short_sha}"
+          fi
+        fi
+
+        # Generate OCI labels
+        current_date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+        labels="org.opencontainers.image.title=${APP}"
+        labels="${labels},org.opencontainers.image.description=Application packaged by Broadsage, Inc."
+        labels="${labels},org.opencontainers.image.vendor=Broadsage, Inc."
+        labels="${labels},org.opencontainers.image.version=${VERSION}"
+        labels="${labels},org.opencontainers.image.created=${current_date}"
+        labels="${labels},org.opencontainers.image.source=https://github.com/${IMAGE_NAMESPACE}/containers"
+        labels="${labels},org.opencontainers.image.documentation=https://github.com/${IMAGE_NAMESPACE}/containers/tree/main/library/${APP}/README.md"
+        labels="${labels},org.opencontainers.image.url=https://github.com/${IMAGE_NAMESPACE}/containers"
+        labels="${labels},org.opencontainers.image.revision=${SHA}"
+
+        # Add platform-specific labels
+        labels="${labels},com.broadsage.image.platform=${PLATFORM}"
+        labels="${labels},com.broadsage.image.build-type=${IS_PRODUCTION}"
+        labels="${labels},com.broadsage.image.container-path=${CONTAINER}"
+
+        # Add build context labels
+        if [[ "$EVENT_NAME" == "pull_request" ]]; then
+          labels="${labels},com.broadsage.image.build-context=pull-request"
+        elif [[ "$EVENT_NAME" == "push" ]]; then
+          labels="${labels},com.broadsage.image.build-context=main-branch"
+        elif [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+          labels="${labels},com.broadsage.image.build-context=manual-dispatch"
+        else
+          labels="${labels},com.broadsage.image.build-context=${EVENT_NAME}"
+        fi
+
+        # Generate digest-friendly tags (no latest/major versions)
+        digest_tags="${image_name}:${VERSION}-${PLATFORM}"
+        if [[ "$EVENT_NAME" != "push" || "$REF" != "refs/heads/main" ]]; then
+          short_sha=$(echo "$SHA" | cut -c1-7)
+          digest_tags="${digest_tags},${image_name}:${VERSION}-${PLATFORM}-${short_sha}"
+        fi
+
+        # Output results
+        echo "image_name=${image_name}" >> "$GITHUB_OUTPUT"
+        echo "tags=${tags}" >> "$GITHUB_OUTPUT"
+        echo "primary_tag=$(echo "${tags}" | cut -d',' -f1)" >> "$GITHUB_OUTPUT"
+        echo "labels=${labels}" >> "$GITHUB_OUTPUT"
+        echo "digest_tags=${digest_tags}" >> "$GITHUB_OUTPUT"
+
+        echo ""
+        echo "Generated metadata:"
+        echo "  Image: ${image_name}"
+        echo "  Tags: ${tags}"
+        echo "  Primary Tag: $(echo "${tags}" | cut -d',' -f1)"
+        echo "  Labels: ${labels}"
+        echo "  Digest Tags: ${digest_tags}"
