@@ -1,17 +1,17 @@
 <!--
-SPDX-FileCopyri4. **✍️ Make** your changes
-5. **✅ Test**: `make dev CONTAINER=nginx`
-6. **📝 Submit** a pull requestText: Copyright (c) 2025 Broadsage <opensource@broadsage.com>
+SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage <opensource@broadsage.com>
 
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# Contributing
+# Contributing to Broadsage Open Source Containers
 
 [![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-%23FE5196?style=flat&logo=conventionalcommits&logoColor=white)](https://conventionalcommits.org)
 [![DCO - developer certificate of origin](https://img.shields.io/badge/DCO-Developer%20Certificate%20of%20Origin-lightyellow?style=flat)](https://developercertificate.org/)
 
-Welcome! 👋 We're excited you want to contribute to Broadsage Containers!
+Welcome! 👋 We're excited you want to contribute to Broadsage's open source container initiative!
+
+This project is part of Broadsage's commitment to fostering open source innovation in the container ecosystem. We welcome contributors from all backgrounds and experience levels to help build production-ready, community-driven container solutions.
 
 ## 🚀 Quick Start
 

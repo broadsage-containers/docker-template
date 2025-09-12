@@ -2,66 +2,99 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-FROM docker.io/bitnami/minideb:bookworm@sha256:c08bf1955a4051f9d44245f049c06c24282de8ff5a6db22df63b054967e33e0c
+FROM debian:bookworm-slim
 
-ARG DOWNLOADS_URL="downloads.bitnami.com/files/stacksmith"
+ARG NGINX_VERSION=1.29.1
 ARG TARGETARCH
+ARG NGINX_USER=nginx
+ARG NGINX_UID=101
+ARG NGINX_GID=101
 
-LABEL com.vmware.cp.artifact.flavor="sha256:c50c90cfd9d12b445b011e6ad529f1ad3daea45c26d20b00732fae3cd71f6a83" \
-      org.opencontainers.image.base.name="docker.io/broadsage/minideb:bookworm" \
-      org.opencontainers.image.created="2025-08-13T18:35:07Z" \
-      org.opencontainers.image.description="Application packaged by Broadsage, Inc." \
-      org.opencontainers.image.documentation="https://github.com/broadsage/containers/tree/main/broadsage/nginx/README.md" \
-      org.opencontainers.image.source="https://github.com/broadsage/containers/tree/main/bitnami/nginx" \
-      org.opencontainers.image.title="nginx" \
+LABEL org.opencontainers.image.title="nginx" \
+      org.opencontainers.image.description="High performance web server and reverse proxy" \
+      org.opencontainers.image.source="https://github.com/broadsage/containers" \
+      org.opencontainers.image.documentation="https://github.com/broadsage/containers/tree/main/library/nginx/README.md" \
       org.opencontainers.image.vendor="Broadsage, Inc." \
-      org.opencontainers.image.version="1.29.1"
+      org.opencontainers.image.version="${NGINX_VERSION}" \
+      org.opencontainers.image.licenses="Apache-2.0"
 
-ENV HOME="/" \
-    OS_ARCH="${TARGETARCH:-amd64}" \
-    OS_FLAVOUR="debian-12" \
-    OS_NAME="linux"
+# Install dependencies and create nginx user
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        wget \
+        gnupg2 \
+        lsb-release \
+    ; \
+    # Add nginx signing key and repository
+    wget -qO /tmp/nginx_signing.key https://nginx.org/keys/nginx_signing.key; \
+    gpg --quiet --with-fingerprint --verify-files /tmp/nginx_signing.key || \
+    apt-key add /tmp/nginx_signing.key; \
+    echo "deb https://nginx.org/packages/debian bookworm nginx" > /etc/apt/sources.list.d/nginx.list; \
+    \
+    # Install nginx
+    apt-get update; \
+    apt-get install -y --no-install-recommends nginx=${NGINX_VERSION}*; \
+    \
+    # Create nginx user and directories
+    groupadd --system --gid ${NGINX_GID} ${NGINX_USER}; \
+    useradd --system --gid ${NGINX_USER} --no-create-home \
+            --home /nonexistent --comment "nginx user" \
+            --shell /bin/false --uid ${NGINX_UID} ${NGINX_USER}; \
+    \
+    # Create required directories
+    mkdir -p /var/cache/nginx /var/log/nginx /var/run/nginx; \
+    chown -R ${NGINX_USER}:${NGINX_USER} /var/cache/nginx /var/log/nginx /var/run/nginx; \
+    chmod 755 /var/cache/nginx /var/log/nginx /var/run/nginx; \
+    \
+    # Create temp directories for nginx
+    mkdir -p /var/cache/nginx/client_temp \
+             /var/cache/nginx/proxy_temp \
+             /var/cache/nginx/fastcgi_temp \
+             /var/cache/nginx/uwsgi_temp \
+             /var/cache/nginx/scgi_temp; \
+    chown -R ${NGINX_USER}:${NGINX_USER} /var/cache/nginx; \
+    \
+    # Clean up
+    apt-get remove -y wget gnupg2 lsb-release; \
+    apt-get autoremove -y; \
+    apt-get clean; \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*; \
+    rm -f /tmp/nginx_signing.key
 
-COPY prebuildfs /
-SHELL ["/bin/bash", "-o", "errexit", "-o", "nounset", "-o", "pipefail", "-c"]
-# Install required system packages and dependencies
-RUN install_packages ca-certificates curl gettext libcrypt1 libgeoip1 libpcre3 libssl3 openssl procps zlib1g
-RUN --mount=type=secret,id=downloads_url,env=SECRET_DOWNLOADS_URL \
-    DOWNLOADS_URL=${SECRET_DOWNLOADS_URL:-${DOWNLOADS_URL}} ; \
-    mkdir -p /tmp/bitnami/pkg/cache/ ; cd /tmp/bitnami/pkg/cache/ || exit 1 ; \
-    COMPONENTS=( \
-      "render-template-1.0.9-8-linux-${OS_ARCH}-debian-12" \
-      "nginx-1.29.1-0-linux-${OS_ARCH}-debian-12" \
-    ) ; \
-    for COMPONENT in "${COMPONENTS[@]}"; do \
-      if [ ! -f "${COMPONENT}.tar.gz" ]; then \
-        curl -SsLf "https://${DOWNLOADS_URL}/${COMPONENT}.tar.gz" -O ; \
-        curl -SsLf "https://${DOWNLOADS_URL}/${COMPONENT}.tar.gz.sha256" -O ; \
-      fi ; \
-      sha256sum -c "${COMPONENT}.tar.gz.sha256" ; \
-      tar -zxf "${COMPONENT}.tar.gz" -C /opt/bitnami --strip-components=2 --no-same-owner ; \
-      rm -rf "${COMPONENT}".tar.gz{,.sha256} ; \
-    done
-RUN apt-get update && apt-get upgrade -y && \
-    apt-get clean && rm -rf /var/lib/apt/lists /var/cache/apt/archives
-RUN chmod g+rwX /opt/bitnami
-RUN find / -perm /6000 -type f -exec chmod a-s {} \; || true
-RUN ln -sf /dev/stdout /opt/bitnami/nginx/logs/access.log
-RUN ln -sf /dev/stderr /opt/bitnami/nginx/logs/error.log
-RUN uninstall_packages curl
+# Copy custom nginx configuration
+COPY config/ /etc/nginx/
 
-COPY rootfs /
-RUN /opt/bitnami/scripts/nginx/postunpack.sh
-ENV APP_VERSION="1.29.1" \
-    BITNAMI_APP_NAME="nginx" \
-    NGINX_HTTPS_PORT_NUMBER="" \
-    NGINX_HTTP_PORT_NUMBER="" \
-    PATH="/opt/bitnami/common/bin:/opt/bitnami/nginx/sbin:$PATH"
+# Create web root and set permissions
+RUN mkdir -p /usr/share/nginx/html; \
+    chown -R ${NGINX_USER}:${NGINX_USER} /usr/share/nginx/html; \
+    chmod 755 /usr/share/nginx/html
 
-EXPOSE 8080 8443
+# Copy default index page
+COPY html/ /usr/share/nginx/html/
+
+# Create entrypoint script
+COPY entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# Security: Remove setuid/setgid binaries
+RUN find / -perm /6000 -type f -exec chmod a-s {} \; 2>/dev/null || true
+
+# Forward request and error logs to docker log collector
+RUN ln -sf /dev/stdout /var/log/nginx/access.log \
+    && ln -sf /dev/stderr /var/log/nginx/error.log
+
+# Expose standard HTTP and HTTPS ports
+EXPOSE 80 443
+
+# Add health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD nginx -t || exit 1
 
 STOPSIGNAL SIGQUIT
-WORKDIR /app
-USER 1001
-ENTRYPOINT [ "/opt/bitnami/scripts/nginx/entrypoint.sh" ]
-CMD [ "/opt/bitnami/scripts/nginx/run.sh" ]
+
+USER ${NGINX_USER}
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["nginx", "-g", "daemon off;"]
