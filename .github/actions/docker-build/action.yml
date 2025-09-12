@@ -48,6 +48,10 @@ inputs:
     description: "Whether to generate build attestations"
     required: false
     default: "false"
+  trivy_category:
+    description: "Category for Trivy SARIF upload (for CodeQL integration)"
+    required: false
+    default: "container-security"
   test_image_tag:
     description: "Tag for test image when load_image is true"
     required: false
@@ -160,7 +164,7 @@ runs:
       uses: github/codeql-action/upload-sarif@662472033e021d55d94146f66f6058822b0b39fd # v3.27.0
       with:
         sarif_file: "trivy-results.sarif"
-        category: "container-security"
+        category: ${{ inputs.trivy_category }}
       continue-on-error: true
 
     - name: Generate security scan summary

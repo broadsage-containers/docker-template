@@ -201,6 +201,7 @@ jobs:
           cache_scope: build-${{ matrix.app }}-${{ matrix.version }}-${{ matrix.platform }}
           enable_security_scan: "true"
           enable_attestations: "false"
+          trivy_category: trivy-${{ matrix.container }}
           test_image_tag: test-image:latest
 
       - name: Build and push production image

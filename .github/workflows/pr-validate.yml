@@ -168,6 +168,7 @@ jobs:
           cache_scope: build-${{ matrix.app }}-${{ matrix.version }}-${{ matrix.platform }}
           enable_security_scan: "true"
           enable_attestations: "false"
+          trivy_category: trivy-pr-${{ matrix.container }}
           test_image_tag: ${{ steps.build-metadata.outputs.primary_tag }}
 
   # Summary job
