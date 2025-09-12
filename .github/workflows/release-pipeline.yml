@@ -135,6 +135,7 @@ jobs:
   # Build and test container images
   build-and-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 120 # Extended timeout for multi-platform builds
     name: Build & Test
     needs: [discover-containers, lint-dockerfiles]
     if: needs.discover-containers.outputs.has_changes == 'true'

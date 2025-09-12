@@ -173,6 +173,7 @@ jobs:
   # Build, test and publish container images
   build-and-publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 120 # Extended timeout for multi-platform builds
     name: Build & Publish
     # Job-level permissions for build and publish operations
     permissions:
