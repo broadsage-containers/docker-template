@@ -37,11 +37,15 @@ RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends nginx=${NGINX_VERSION}*; \
     \
-    # Create nginx user and directories
-    groupadd --system --gid ${NGINX_GID} ${NGINX_USER}; \
-    useradd --system --gid ${NGINX_USER} --no-create-home \
-            --home /nonexistent --comment "nginx user" \
-            --shell /bin/false --uid ${NGINX_UID} ${NGINX_USER}; \
+    # Create nginx user and directories (if they don't already exist)
+    if ! getent group ${NGINX_USER} >/dev/null 2>&1; then \
+        groupadd --system --gid ${NGINX_GID} ${NGINX_USER}; \
+    fi; \
+    if ! getent passwd ${NGINX_USER} >/dev/null 2>&1; then \
+        useradd --system --gid ${NGINX_USER} --no-create-home \
+                --home /nonexistent --comment "nginx user" \
+                --shell /bin/false --uid ${NGINX_UID} ${NGINX_USER}; \
+    fi; \
     \
     # Create required directories
     mkdir -p /var/cache/nginx /var/log/nginx /var/run/nginx; \
