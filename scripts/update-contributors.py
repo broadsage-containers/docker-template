@@ -5,7 +5,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-Simple Python script to update dynamic statistics in CONTRIBUTORS.md
+Simple Python script to update dynamic statistics in CONTRIBUTING.md
 """
 
 import re
@@ -118,10 +118,10 @@ def get_git_stats():
 
 
 def update_contributors_file(stats):
-    """Update the CONTRIBUTORS.md file with new statistics"""
-    print("📝 Updating CONTRIBUTORS.md...")
+    """Update the CONTRIBUTING.md file with new statistics"""
+    print("📝 Updating CONTRIBUTING.md...")
 
-    contributors_file = "CONTRIBUTORS.md"
+    contributors_file = "CONTRIBUTING.md"
     current_date = datetime.now().strftime("%B %d, %Y")
     current_month = datetime.now().strftime("%B %Y")
 
@@ -219,7 +219,7 @@ def main():
     update_contributors_file(stats)
 
     # Print summary
-    print("✅ Successfully updated CONTRIBUTORS.md!")
+    print("✅ Successfully updated CONTRIBUTING.md!")
     print("")
     print("📈 Statistics summary:")
     print(f"   📊 Total Contributors: {stats['total_contributors']}")
