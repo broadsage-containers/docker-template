@@ -168,7 +168,7 @@ jobs:
           cache_scope: build-${{ matrix.app }}-${{ matrix.version }}-${{ matrix.platform }}
           enable_security_scan: "true"
           enable_attestations: "false"
-          test_image_tag: ${{ steps.build-metadata.outputs.tags }}
+          test_image_tag: ${{ steps.build-metadata.outputs.primary_tag }}
 
   # Summary job
   pr-check-summary:

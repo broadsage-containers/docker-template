@@ -46,6 +46,9 @@ outputs:
   tags:
     description: "Comma-separated list of image tags"
     value: ${{ steps.generate-metadata.outputs.tags }}
+  primary_tag:
+    description: "Primary image tag for testing and single-tag usage"
+    value: ${{ steps.generate-metadata.outputs.primary_tag }}
   labels:
     description: "Comma-separated list of OCI labels"
     value: ${{ steps.generate-metadata.outputs.labels }}
@@ -165,6 +168,7 @@ runs:
         # Output results
         echo "image_name=${image_name}" >> "$GITHUB_OUTPUT"
         echo "tags=${tags}" >> "$GITHUB_OUTPUT"
+        echo "primary_tag=$(echo "${tags}" | cut -d',' -f1)" >> "$GITHUB_OUTPUT"
         echo "labels=${labels}" >> "$GITHUB_OUTPUT"
         echo "digest_tags=${digest_tags}" >> "$GITHUB_OUTPUT"
 
@@ -172,5 +176,6 @@ runs:
         echo "Generated metadata:"
         echo "  Image: ${image_name}"
         echo "  Tags: ${tags}"
+        echo "  Primary Tag: $(echo "${tags}" | cut -d',' -f1)"
         echo "  Labels: ${labels}"
         echo "  Digest Tags: ${digest_tags}"
