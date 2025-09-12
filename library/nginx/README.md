@@ -220,7 +220,7 @@ We follow semantic versioning aligned with nginx releases:
 
 ### Future Plans
 
-- [ ] Multi-architecture support (ARM64, s390x)
+- [x] Multi-architecture support (AMD64, ARM64, RISC-V, PowerPC, s390x, MIPS, LoongArch)
 - [ ] Additional nginx modules and enterprise features
 - [ ] Kubernetes operator integration
 - [ ] SBOM and vulnerability scanning automation

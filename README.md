@@ -21,6 +21,7 @@ Broadsage is committed to fostering open source innovation in the container ecos
 
 - **Security-Hardened**: Enterprise-grade security with minimal attack surface and comprehensive hardening
 - **Production-Ready**: Battle-tested containers suitable for mission-critical deployments
+- **Multi-Platform**: Native support for 13 architectures (AMD64, ARM64, RISC-V, PowerPC, s390x, MIPS, LoongArch, and more)
 - **Multi-Application**: Support for web servers, databases, message queues, and application frameworks
 - **CVE-Responsive**: Rapid security updates and vulnerability management
 - **Enterprise-Grade**: Suitable for regulated industries and high-security environments
