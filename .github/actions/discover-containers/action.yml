@@ -178,7 +178,7 @@ runs:
           done
           matrix_json+="]"
           
-          echo "matrix={\"include\":$matrix_json}" >> "$GITHUB_OUTPUT"
+          echo "matrix=$matrix_json" >> "$GITHUB_OUTPUT"
           echo "has_changes=true" >> "$GITHUB_OUTPUT"
           echo "container_count=${#unique_containers[@]}" >> "$GITHUB_OUTPUT"
           
@@ -186,7 +186,7 @@ runs:
           echo "Container count: ${#unique_containers[@]}"
         else
           echo "No containers found to process"
-          echo "matrix={\"include\":[]}" >> "$GITHUB_OUTPUT"
+          echo "matrix=[]" >> "$GITHUB_OUTPUT"
           echo "has_changes=false" >> "$GITHUB_OUTPUT"
           echo "container_count=0" >> "$GITHUB_OUTPUT"
         fi
