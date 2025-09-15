@@ -111,7 +111,7 @@ jobs:
   # Build and test container images (without pushing)
   build-and-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 60  # Standard timeout for single-platform builds
+    timeout-minutes: 60 # Standard timeout for single-platform builds
     name: Build & Test (Unprivileged)
     # Job-level permissions for build and test without publishing
     permissions:
