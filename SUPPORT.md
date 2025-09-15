@@ -6,7 +6,16 @@ SPDX-License-Identifier: Apache-2.0
 
 # Getting Support
 
-Welcome to the Broadsage Containers community! This guide will help you find the right way to get assistance.
+Welcome to the Broadsage Containers community!
+
+## 🎯 Quick Support
+
+For comprehensive support information, see our **[Communication Guide](docs/communication.md)** which includes:
+
+- **🚀 Quick contact table** with response times
+- **🏠 GitHub channel guidelines** (Issues vs Discussions)
+- **📧 Email contacts** for different purposes
+- **🎯 Best practices** and community guidelines
 
 ## 📋 Before You Ask
 
@@ -14,7 +23,7 @@ Welcome to the Broadsage Containers community! This guide will help you find the
 
 1. **📖 Read the docs**: Check our [documentation](docs/) and [README](README.md)
 2. **🔍 Search existing**: Look through [issues](../../issues) and [discussions](../../discussions)
-3. **📝 Check the FAQ**: See [common questions](#-faq) below
+3. **📝 Check the communication guide**: See [docs/communication.md](docs/communication.md) for detailed guidance
 
 **If you need to ask, please include:**
 
@@ -23,36 +32,9 @@ Welcome to the Broadsage Containers community! This guide will help you find the
 - Complete error messages or logs
 - Steps to reproduce the issue
 
-## 🆘 Where to Get Help
+---
 
-| I want to... | Use this | Response Time |
-|--------------|----------|---------------|
-| Ask a question or get advice | [💬 Discussions](../../discussions) | Community-driven |
-| Report a bug or request a feature | [🐛 Issues](../../issues/new/choose) | 1-3 business days |
-| Report a security vulnerability | [� Security team](mailto:security@broadsage.com) | < 24 hours |
-| Contact maintainers privately | [📧 Email](mailto:opensource@broadsage.com) | 2-5 business days |
-
-## 💬 GitHub Discussions
-
-**Perfect for:**
-
-- General questions about using containers
-- Feature requests and ideas  
-- Best practices and community discussions
-- Sharing your success stories
-
-**[💬 Start a discussion →](../../discussions)**
-
-## 🐛 GitHub Issues  
-
-**Use issues for:**
-
-- Bug reports with specific container images
-- Technical problems with builds
-- Documentation improvements
-- Well-defined feature requests
-
-**[🐛 Create an issue →](../../issues/new/choose)**
+*📖 For complete support information: [docs/communication.md](docs/communication.md)*
 
 ## 📊 FAQ
 
@@ -73,7 +55,7 @@ A: Yes! All images are security-scanned and tested.
 A: Check our [security standards](docs/image-standards.md) for non-root setup.
 
 **Q: How do I report a security issue?**  
-A: Email [security@broadsage.com](mailto:security@broadsage.com) (never create public issues).
+A: See our [Communication Guide](docs/communication.md#-email-contacts) for security reporting details (never create public issues).
 
 **Q: Can I contribute a new container?**  
 A: Yes! See our [contributing guide](CONTRIBUTING.md).
@@ -87,9 +69,7 @@ A: Yes! See our [contributing guide](CONTRIBUTING.md).
 
 ## 📞 Contact
 
-**General questions**: [opensource@broadsage.com](mailto:opensource@broadsage.com)  
-**Security issues**: [security@broadsage.com](mailto:security@broadsage.com)  
-**GitHub**: [Issues](../../issues) • [Discussions](../../discussions)
+For all contact information and communication channels, see our [Communication Guide](docs/communication.md).
 
 ---
 

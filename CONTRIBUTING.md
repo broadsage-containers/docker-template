@@ -1,17 +1,17 @@
 <!--
-SPDX-FileCopyri4. **✍️ Make** your changes
-5. **✅ Test**: `make dev CONTAINER=nginx`
-6. **📝 Submit** a pull requestText: Copyright (c) 2025 Broadsage <opensource@broadsage.com>
+SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage <opensource@broadsage.com>
 
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# Contributing
+# Contributing to Broadsage Open Source Containers
 
 [![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-%23FE5196?style=flat&logo=conventionalcommits&logoColor=white)](https://conventionalcommits.org)
 [![DCO - developer certificate of origin](https://img.shields.io/badge/DCO-Developer%20Certificate%20of%20Origin-lightyellow?style=flat)](https://developercertificate.org/)
 
-Welcome! 👋 We're excited you want to contribute to Broadsage Containers!
+Welcome! 👋 We're excited you want to contribute to Broadsage's open source container initiative!
+
+This project is part of Broadsage's commitment to fostering open source innovation in the container ecosystem. We welcome contributors from all backgrounds and experience levels to help build production-ready, community-driven container solutions.
 
 ## 🚀 Quick Start
 
@@ -34,6 +34,104 @@ Welcome! 👋 We're excited you want to contribute to Broadsage Containers!
 - 📚 **Improve docs** - Help others learn
 - 🆕 **Add containers** - New image needed?
 
+## 📋 Contribution Process
+
+### 1. Issue Creation
+
+Before starting work:
+
+- **Check existing issues** to avoid duplication
+- **Create an issue** describing your proposed changes
+- **Get feedback** from maintainers before major changes
+- **Use appropriate labels** (bug, enhancement, security, etc.)
+
+### 2. Branch Strategy
+
+We use a GitHub Flow model:
+
+```bash
+# Create feature branch
+git checkout -b feature/your-feature-name
+
+# Or for bug fixes
+git checkout -b fix/issue-description
+
+# Keep branch updated
+git pull upstream main
+git merge upstream/main
+```
+
+### 3. Pull Request Process
+
+1. **Push your branch**
+
+   ```bash
+   git push origin feature/your-feature-name
+   ```
+
+2. **Create Pull Request**
+   - Use the pull request template
+   - Reference related issues
+   - Provide clear description of changes
+   - Include testing evidence
+
+3. **Code Review**
+   - Address reviewer feedback
+   - Keep PR focused and small
+   - Ensure CI/CD passes
+
+4. **Merge Process**
+   - Maintainer will merge after approval
+   - Squash and merge for clean history
+
+## 🐳 Container Development Standards
+
+### Base Image Requirements
+
+- **Official base images** preferred (debian, ubuntu, alpine)
+- **Specific versions** (no `latest` tags)
+- **Security updates** applied
+- **Minimal attack surface** (remove unnecessary packages)
+
+### Dockerfile Best Practices
+
+```dockerfile
+# Use specific base image versions
+FROM debian:12-slim
+
+# Set maintainer label
+LABEL maintainer="opensource@broadsage.com"
+
+# Use non-root user
+RUN groupadd -g 1001 appuser && \
+    useradd -u 1001 -g appuser appuser
+
+# Install packages in single layer
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        nginx \
+        ca-certificates && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Switch to non-root user
+USER appuser
+```
+
+### Testing Requirements
+
+All containers must pass:
+
+- **Unit Tests** - Container build and basic functionality
+- **Integration Tests** - Multi-container scenarios
+- **Security Tests** - Vulnerability scans and compliance
+- **Performance Tests** - Resource usage and benchmarks
+
+```bash
+# Test your container
+make test CONTAINER=nginx VERSION=1.29
+```
+
 ## ⚡ Development Setup
 
 ```bash
@@ -47,6 +145,30 @@ cd containers
 # 3. Test the setup
 make help
 make build CONTAINER=nginx
+```
+
+### Repository Structure
+
+```text
+containers/
+├── library/                   # Container definitions
+│   └── nginx/                # Application containers
+│       ├── README.md         # Application documentation
+│       ├── docker-compose.yml # Testing configuration
+│       └── 1.29/             # Version directory
+│           └── debian-12/    # OS variant
+├── docs/                     # Project documentation
+├── scripts/                  # Automation scripts
+└── tests/                    # Test suites
+```
+
+### Local Testing
+
+Each container can be tested locally using the included Docker Compose files:
+
+```bash
+cd library/nginx/1.29/debian-12
+docker compose up --build
 ```
 
 ## 📝 Commit Requirements
@@ -83,11 +205,32 @@ Our bot automatically adds labels based on your PR title:
 ## 🔒 Security
 
 **Found a vulnerability?** 🚨 **Don't create a public issue!**
-Email: [security@broadsage.com](mailto:security@broadsage.com)
+
+See our [Communication Guide](docs/communication.md#-email-contacts) for secure reporting channels.
 
 ## ❓ Getting Help
 
-**Quick Questions:** [GitHub Discussions](../../discussions) | **Bugs:** [Create Issue](../../issues/new) | **Security:** [security@broadsage.com](mailto:security@broadsage.com)
+**Need assistance?** See our [Communication Guide](docs/communication.md) for all support channels and contact information.
+
+## 🎉 Recognition
+
+We value all contributions! Contributors are recognized through:
+
+- **Contributor acknowledgments** in release notes
+- **Community highlights** in project communications  
+- **Professional networking** within the container security community
+- **Skill development** through mentorship and guidance
+
+## 📋 FAQ
+
+**Q: How long does the review process take?**  
+A: Simple changes are typically reviewed within 2-3 business days. Complex changes may take up to a week.
+
+**Q: How do I add a new container?**  
+A: Create an issue proposing the new container, get maintainer approval, then follow our container development standards.
+
+**Q: How do I become a maintainer?**  
+A: See our [MAINTAINERS.md](MAINTAINERS.md) file for the maintainer nomination process and requirements.
 
 ## 📚 Detailed Guides
 

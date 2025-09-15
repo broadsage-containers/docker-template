@@ -153,9 +153,9 @@ You can customize templates by:
 ## Need Help?
 
 - Check our Contributing Guide
-- Join community discussions
+- Join community discussions (see [Communication Guide](../../docs/communication.md))
 - Create an issue for template-related problems
-- Contact maintainers for complex questions
+- Contact maintainers using channels from the Communication Guide
 
 ---
 

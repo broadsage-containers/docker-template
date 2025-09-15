@@ -38,7 +38,7 @@ help:
 	@echo "Documentation Targets:"
 	@echo "  docs                 	Generate documentation"
 	@echo "  docs-serve           	Serve documentation locally"
-	@echo "  update-contributors  	Update dynamic statistics in CONTRIBUTORS.md file"
+	@echo "  update-contributors  	Update dynamic statistics in CONTRIBUTING.md file"
 	@echo "  show-stats           	Display current contributor statistics"
 	@echo ""
 	@echo "Validation Targets:"

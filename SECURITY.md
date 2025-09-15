@@ -24,15 +24,9 @@ We take the security of our container images seriously. If you believe you have 
 
 **Please do not report security vulnerabilities through public GitHub issues.**
 
-Instead, please send an email to [security@broadsage.com](mailto:security@broadsage.com) with the following information:
+For detailed security reporting procedures, contact information, and response expectations, see our [Communication Guide](docs/communication.md#-email-contacts).
 
-- Type of issue (buffer overflow, SQL injection, cross-site scripting, etc.)
-- Full paths of source file(s) related to the manifestation of the issue
-- The location of the affected source code (tag/branch/commit or direct URL)
-- Any special configuration required to reproduce the issue
-- Step-by-step instructions to reproduce the issue
-- Proof-of-concept or exploit code (if possible)
-- Impact of the issue, including how an attacker might exploit it
+**Quick Reference:** Email [security@broadsage.com](mailto:security@broadsage.com)
 
 ### Response Timeline
 
