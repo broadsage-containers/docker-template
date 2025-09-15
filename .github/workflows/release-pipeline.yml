@@ -102,7 +102,7 @@ jobs:
     needs: discover-containers
     if: needs.discover-containers.outputs.has_changes == 'true'
     outputs:
-      platform_matrix: ${{ steps.platform-matrix.outputs.matrix }}
+      test_matrix: ${{ steps.platform-matrix.outputs.test_matrix }}
       test_platforms: ${{ steps.platform-matrix.outputs.test_platforms }}
       production_platforms: ${{ steps.platform-matrix.outputs.production_platforms }}
     steps:
@@ -117,50 +117,29 @@ jobs:
           # Define platform groups
           TEST_PLATFORMS="linux/amd64,linux/arm64"  # Fast platforms for testing
           PRODUCTION_PLATFORMS="${{ env.BUILD_PLATFORMS }}"  # All platforms for production
-
-          # Convert to JSON arrays for matrix
-          echo "Converting platforms to matrix format..."
-
-          # Test platforms matrix (used for local builds and testing)
-          test_matrix="["
-          IFS=',' read -ra PLATFORMS <<< "$TEST_PLATFORMS"
-          for i in "${!PLATFORMS[@]}"; do
-            platform="${PLATFORMS[$i]}"
-            if [[ $i -gt 0 ]]; then
-              test_matrix+=","
-            fi
-            test_matrix+="{\"platform\":\"${platform}\",\"runner\":\"ubuntu-latest\",\"build_type\":\"test\"}"
-          done
-          test_matrix+="]"
-
-          # Production platforms matrix (used for multi-platform production builds)
-          prod_matrix="["
-          IFS=',' read -ra PLATFORMS <<< "$PRODUCTION_PLATFORMS"
-          for i in "${!PLATFORMS[@]}"; do
-            platform="${PLATFORMS[$i]}"
-            if [[ $i -gt 0 ]]; then
-              prod_matrix+=","
-            fi
-            # Use larger runners for ARM builds if available
-            if [[ "$platform" =~ arm64 ]]; then
-              runner="ubuntu-latest"  # Can be upgraded to ubuntu-latest-arm64 if available
-            else
-              runner="ubuntu-latest"
-            fi
-            prod_matrix+="{\"platform\":\"${platform}\",\"runner\":\"${runner}\",\"build_type\":\"production\"}"
-          done
-          prod_matrix+="]"
-
-          echo "Test platforms matrix: $test_matrix"
-          echo "Production platforms matrix: $prod_matrix"
-
+          
+          # Get container matrix from previous job
+          CONTAINERS='${{ needs.discover-containers.outputs.matrix }}'
+          echo "Containers to process: $CONTAINERS"
+          
+          # Generate combined test matrix (containers × test platforms) using jq
+          test_matrix=$(echo "$CONTAINERS" | jq -c --arg test_platforms "$TEST_PLATFORMS" '
+            . as $containers |
+            ($test_platforms | split(",")) as $platforms |
+            [
+              $containers[] as $container |
+              $platforms[] as $test_platform |
+              ($container + {"test_platform": $test_platform})
+            ]
+          ')
+          
+          echo "Test matrix: $test_matrix"
+          
           {
-            echo "matrix=$test_matrix"
+            echo "test_matrix=$test_matrix"
             echo "test_platforms=$TEST_PLATFORMS"
             echo "production_platforms=$PRODUCTION_PLATFORMS"
-          } >> "$GITHUB_OUTPUT"
-
-  # Lint and validate Dockerfiles
+          } >> "$GITHUB_OUTPUT"  # Lint and validate Dockerfiles
   lint-dockerfiles:
     runs-on: ubuntu-latest
     name: Lint Dockerfiles
@@ -208,10 +187,7 @@ jobs:
       fail-fast: false
       max-parallel: 6 # Increased parallelism for platform matrix
       matrix:
-        include: ${{ fromJSON(needs.discover-containers.outputs.matrix) }}
-        test_platform:
-          - linux/amd64
-          - linux/arm64
+        include: ${{ fromJSON(needs.generate-platform-matrix.outputs.test_matrix) }}
     permissions:
       contents: read
       packages: write
