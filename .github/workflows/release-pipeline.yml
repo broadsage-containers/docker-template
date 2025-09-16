@@ -142,7 +142,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"  # Lint and validate Dockerfiles
   lint-dockerfiles:
     runs-on: ubuntu-latest
-    name: Lint Dockerfiles
+    name: ${{ matrix.app }}-${{ matrix.version }}-${{ matrix.platform }}
     needs: [discover-containers, generate-platform-matrix]
     if: needs.discover-containers.outputs.has_changes == 'true'
     strategy:
@@ -180,7 +180,7 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
     timeout-minutes: 60 # Reduced timeout for test builds
-    name: Build & Test (${{ matrix.container }} - ${{ matrix.test_platform }})
+    name: ${{ matrix.app }}-${{ matrix.version }}-${{ matrix.platform }}-${{ matrix.test_platform }}
     needs: [discover-containers, generate-platform-matrix, lint-dockerfiles]
     if: needs.discover-containers.outputs.has_changes == 'true'
     strategy:
@@ -253,7 +253,7 @@ jobs:
   build-production:
     runs-on: ubuntu-latest
     timeout-minutes: 180 # Extended timeout for multi-platform production builds
-    name: Production Build (${{ matrix.container }})
+    name: ${{ matrix.app }}-${{ matrix.version }}-${{ matrix.platform }}
     needs: [discover-containers, generate-platform-matrix, build-and-test]
     if: |
       needs.discover-containers.outputs.has_changes == 'true' &&
