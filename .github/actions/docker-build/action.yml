@@ -56,6 +56,10 @@ inputs:
     description: "Tag for test image when load_image is true"
     required: false
     default: "test-image:latest"
+  build_args:
+    description: "Build arguments to pass to Docker build"
+    required: false
+    default: ""
 
 outputs:
   image_digest:
@@ -96,6 +100,7 @@ runs:
         context: ${{ inputs.container_path }}
         file: ${{ inputs.container_path }}/${{ inputs.dockerfile_path }}
         platforms: ${{ inputs.build_platforms }}
+        build-args: ${{ inputs.build_args }}
         push: ${{ inputs.push_image }}
         load: ${{ inputs.load_image }}
         tags: ${{ inputs.load_image == 'true' && inputs.test_image_tag || inputs.image_tags }}

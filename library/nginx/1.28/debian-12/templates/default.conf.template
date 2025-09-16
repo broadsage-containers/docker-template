@@ -1,0 +1,42 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage <opensource@broadsage.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# Example nginx configuration template with environment variable substitution
+# This file will be processed by 20-envsubst-on-templates.sh
+
+server {
+    listen       ${NGINX_PORT:-8080};
+    listen  [::]:${NGINX_PORT:-8080};
+    server_name  ${NGINX_SERVER_NAME:-localhost};
+
+    #access_log  /var/log/nginx/host.access.log  main;
+
+    location / {
+        root   /usr/share/nginx/html;
+        index  index.html index.htm;
+    }
+
+    # Custom error pages
+    error_page   404              /404.html;
+    error_page   500 502 503 504  /50x.html;
+    location = /50x.html {
+        root   /usr/share/nginx/html;
+    }
+
+    # Security headers (customizable via environment variables)
+    add_header X-Frame-Options "${X_FRAME_OPTIONS:-DENY}" always;
+    add_header X-Content-Type-Options "${X_CONTENT_TYPE_OPTIONS:-nosniff}" always;
+    add_header X-XSS-Protection "${X_XSS_PROTECTION:-1; mode=block}" always;
+    add_header Referrer-Policy "${REFERRER_POLICY:-strict-origin-when-cross-origin}" always;
+
+    # Optional: Custom location for health checks
+    location /health {
+        access_log off;
+        return 200 "healthy\n";
+        add_header Content-Type text/plain;
+    }
+
+    # Optional: Custom upstream configuration
+    ${NGINX_UPSTREAM_CONFIG:-}
+}

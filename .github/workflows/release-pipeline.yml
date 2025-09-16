@@ -40,7 +40,7 @@ concurrency:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAMESPACE: ${{ github.repository_owner }}
-  BUILD_PLATFORMS: linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v5,linux/386,linux/ppc64le,linux/s390x,linux/mips64le
+  BUILD_PLATFORMS: linux/386,linux/amd64,linux/arm/v5,linux/arm/v7,linux/arm64/v8,linux/ppc64le,linux/s390x
   COSIGN_EXPERIMENTAL: 1
 
 jobs:
@@ -240,6 +240,8 @@ jobs:
           image_tags: ${{ steps.build-metadata.outputs.tags }}
           image_labels: ${{ steps.build-metadata.outputs.labels }}
           build_platforms: ${{ matrix.test_platform }}
+          build_args: |
+            TARGETPLATFORM=${{ matrix.test_platform }}
           push_image: "false"
           load_image: "true"
           cache_scope: build-${{ matrix.app }}-${{ matrix.version }}-${{ matrix.platform }}-${{ matrix.test_platform }}
@@ -317,6 +319,8 @@ jobs:
           image_tags: ${{ steps.build-metadata.outputs.tags }}
           image_labels: ${{ steps.build-metadata.outputs.labels }}
           build_platforms: ${{ needs.generate-platform-matrix.outputs.production_platforms }}
+          build_args: |
+            TARGETPLATFORM=${{ needs.generate-platform-matrix.outputs.production_platforms }}
           push_image: "true"
           load_image: "false"
           cache_scope: build-${{ matrix.app }}-${{ matrix.version }}-${{ matrix.platform }}-production

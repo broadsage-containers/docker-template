@@ -2,13 +2,16 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-FROM debian:bookworm-slim
+ARG TARGETPLATFORM
+ARG BUILDPLATFORM
+FROM --platform=$TARGETPLATFORM debian:bookworm-slim
 
 ARG NGINX_VERSION=1.28.0
 ARG TARGETARCH
 ARG NGINX_USER=nginx
 ARG NGINX_UID=101
 ARG NGINX_GID=101
+ARG NGINX_MODULES=""
 
 LABEL org.opencontainers.image.title="nginx" \
       org.opencontainers.image.description="High performance web server and reverse proxy" \
@@ -28,6 +31,7 @@ RUN set -eux; \
         wget \
         gnupg2 \
         lsb-release \
+        gettext-base \
     ; \
     # Add nginx signing key and repository with better error handling
     wget -qO /tmp/nginx_signing.key https://nginx.org/keys/nginx_signing.key; \
@@ -50,6 +54,20 @@ RUN set -eux; \
             # Fallback to latest 1.28.x version
             apt-get install -y --no-install-recommends nginx=1.28.*; \
         fi; \
+    fi; \
+    \
+    # Install optional nginx modules if specified
+    if [[ -n "$NGINX_MODULES" ]]; then \
+        echo "Installing nginx modules: $NGINX_MODULES"; \
+        for module in $NGINX_MODULES; do \
+            # Try to install the module with version matching
+            if apt-cache show "nginx-module-$module" >/dev/null 2>&1; then \
+                apt-get install -y --no-install-recommends "nginx-module-$module=${NGINX_VERSION}*" || \
+                apt-get install -y --no-install-recommends "nginx-module-$module"; \
+            else \
+                echo "Module nginx-module-$module not found, skipping..."; \
+            fi; \
+        done; \
     fi; \
     # Verify nginx installation and version
     nginx -v; \
@@ -89,6 +107,9 @@ RUN set -eux; \
 # Copy custom nginx configuration
 COPY config/ /etc/nginx/
 
+# Copy templates for dynamic configuration
+COPY templates/ /etc/nginx/templates/
+
 # Create web root and set permissions
 RUN mkdir -p /usr/share/nginx/html; \
     chown -R ${NGINX_USER}:${NGINX_USER} /usr/share/nginx/html; \
@@ -97,9 +118,15 @@ RUN mkdir -p /usr/share/nginx/html; \
 # Copy default index page
 COPY html/ /usr/share/nginx/html/
 
-# Create entrypoint script
-COPY entrypoint.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/entrypoint.sh
+# Create docker-entrypoint.d directory and copy scripts
+RUN mkdir -p /docker-entrypoint.d
+COPY docker-entrypoint.d/ /docker-entrypoint.d/
+
+# Copy main entrypoint script
+COPY docker-entrypoint.sh /
+RUN chmod +x /docker-entrypoint.sh && \
+    chmod +x /docker-entrypoint.d/*.sh && \
+    chmod +x /docker-entrypoint.d/*.envsh
 
 # Security: Remove setuid/setgid binaries
 RUN find / -perm /6000 -type f -exec chmod a-s {} \; 2>/dev/null || true
@@ -108,8 +135,8 @@ RUN find / -perm /6000 -type f -exec chmod a-s {} \; 2>/dev/null || true
 RUN ln -sf /dev/stdout /var/log/nginx/access.log \
     && ln -sf /dev/stderr /var/log/nginx/error.log
 
-# Expose standard HTTP and HTTPS ports
-EXPOSE 80 443
+# Expose standard HTTP port for non-root user (8080) and HTTPS (8443)
+EXPOSE 8080 8443
 
 # Add health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
@@ -119,5 +146,5 @@ STOPSIGNAL SIGQUIT
 
 USER ${NGINX_USER}
 
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["nginx", "-g", "daemon off;"]
