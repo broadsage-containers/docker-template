@@ -126,7 +126,7 @@ runs:
         TEST_IMAGE="${{ inputs.test_image_tag }}"
         BUILD_PLATFORMS="${{ inputs.build_platforms }}"
         HOST_ARCH=$(uname -m)
-        
+
         echo "Host architecture: $HOST_ARCH"
         echo "Build platforms: $BUILD_PLATFORMS"
 
@@ -140,7 +140,7 @@ runs:
 
         # Basic container health check with platform awareness
         echo "Starting container for health check..."
-        
+
         if [[ -n "$NATIVE_PLATFORM" ]]; then
           echo "Testing native platform: $NATIVE_PLATFORM"
           CONTAINER_ID=$(docker run --rm -d --name test-container --platform="$NATIVE_PLATFORM" "$TEST_IMAGE" 2>/dev/null || true)
