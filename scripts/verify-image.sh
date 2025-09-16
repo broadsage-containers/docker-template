@@ -180,13 +180,13 @@ verify_github_attestations() {
   # Verify GitHub attestations (comprehensive)
   if gh attestation verify "oci://$image" --repo broadsage/containers 2>/dev/null; then
     log_success "GitHub attestations verified successfully"
-    
+
     # Show attestation details if verbose
     if [[ "$VERBOSE" == "1" ]]; then
       log_info "GitHub Attestation Details:"
       gh attestation list --repo broadsage/containers --digest "$(echo "$image" | cut -d'@' -f2)" 2>/dev/null || true
     fi
-    
+
     return 0
   else
     log_warning "GitHub attestation verification failed (may not be available for all images)"
@@ -317,11 +317,9 @@ main() {
 
   # Full verification
   local sig_file=""
-  local sbom_att_file=""
 
   if [[ "$download_sbom_flag" == "true" ]]; then
     sig_file="$output_dir/verification-$(basename "$image" | tr ':/' '-').json"
-    sbom_att_file="$output_dir/sbom-attestation-$(basename "$image" | tr ':/' '-').json"
   fi
 
   # Verify signature
