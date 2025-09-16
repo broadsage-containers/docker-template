@@ -95,11 +95,54 @@ jobs:
           force_all: ${{ github.event.inputs.force_build == 'true' || github.event_name == 'schedule' }}
           include_dev_versions: "true"
 
-  # Lint and validate Dockerfiles
+  # Generate platform matrix for builds
+  generate-platform-matrix:
+    runs-on: ubuntu-latest
+    name: Generate Platform Matrix
+    needs: discover-containers
+    if: needs.discover-containers.outputs.has_changes == 'true'
+    outputs:
+      test_matrix: ${{ steps.platform-matrix.outputs.test_matrix }}
+      test_platforms: ${{ steps.platform-matrix.outputs.test_platforms }}
+      production_platforms: ${{ steps.platform-matrix.outputs.production_platforms }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@f4a75cfd619ee5ce8d5b864b0d183aff3c69b55a # v2.13.1
+        with:
+          egress-policy: audit
+
+      - name: Generate platform build matrix
+        id: platform-matrix
+        run: |
+          # Define platform groups
+          TEST_PLATFORMS="linux/amd64,linux/arm64"  # Fast platforms for testing
+          PRODUCTION_PLATFORMS="${{ env.BUILD_PLATFORMS }}"  # All platforms for production
+          # Get container matrix from previous job
+          CONTAINERS='${{ needs.discover-containers.outputs.matrix }}'
+          echo "Containers to process: $CONTAINERS"
+
+          # Generate combined test matrix (containers × test platforms) using jq
+          test_matrix=$(echo "$CONTAINERS" | jq -c --arg test_platforms "$TEST_PLATFORMS" '
+            . as $containers |
+            ($test_platforms | split(",")) as $platforms |
+            [
+              $containers[] as $container |
+              $platforms[] as $test_platform |
+              ($container + {"test_platform": $test_platform})
+            ]
+          ')
+
+          echo "Test matrix: $test_matrix"
+
+          {
+            echo "test_matrix=$test_matrix"
+            echo "test_platforms=$TEST_PLATFORMS"
+            echo "production_platforms=$PRODUCTION_PLATFORMS"
+          } >> "$GITHUB_OUTPUT"  # Lint and validate Dockerfiles
   lint-dockerfiles:
     runs-on: ubuntu-latest
-    name: Lint Dockerfiles
-    needs: discover-containers
+    name: ${{ matrix.app }}-${{ matrix.version }}-${{ matrix.platform }}
+    needs: [discover-containers, generate-platform-matrix]
     if: needs.discover-containers.outputs.has_changes == 'true'
     strategy:
       fail-fast: false
@@ -132,16 +175,93 @@ jobs:
           sarif_file: hadolint-results.sarif
           category: hadolint-${{ matrix.container }}
 
-  # Build and test container images
+  # Build and test container images (fast platforms only)
   build-and-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 120 # Extended timeout for multi-platform builds
-    name: Build & Test
-    needs: [discover-containers, lint-dockerfiles]
+    timeout-minutes: 60 # Reduced timeout for test builds
+    name: ${{ matrix.app }}-${{ matrix.version }}-${{ matrix.platform }}-${{ matrix.test_platform }}
+    needs: [discover-containers, generate-platform-matrix, lint-dockerfiles]
     if: needs.discover-containers.outputs.has_changes == 'true'
     strategy:
       fail-fast: false
-      max-parallel: 3
+      max-parallel: 6 # Increased parallelism for platform matrix
+      matrix:
+        include: ${{ fromJSON(needs.generate-platform-matrix.outputs.test_matrix) }}
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+      security-events: write
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@f4a75cfd619ee5ce8d5b864b0d183aff3c69b55a # v2.13.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout Repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate build metadata
+        id: build-metadata
+        uses: ./.github/actions/build-metadata
+        with:
+          container_path: ${{ matrix.container }}
+          app_name: ${{ matrix.app }}
+          version: ${{ matrix.version }}
+          platform: ${{ matrix.platform }}
+          registry: ${{ env.REGISTRY }}
+          image_namespace: ${{ env.IMAGE_NAMESPACE }}
+          event_name: ${{ github.event_name }}
+          ref: ${{ github.ref }}
+          sha: ${{ github.sha }}
+          is_production: "false"
+
+      - name: Build and test container (platform-specific)
+        id: build-test
+        uses: ./.github/actions/docker-build
+        with:
+          container_path: ${{ matrix.container }}
+          image_tags: ${{ steps.build-metadata.outputs.tags }}
+          image_labels: ${{ steps.build-metadata.outputs.labels }}
+          build_platforms: ${{ matrix.test_platform }}
+          push_image: "false"
+          load_image: "true"
+          cache_scope: build-${{ matrix.app }}-${{ matrix.version }}-${{ matrix.platform }}-${{ matrix.test_platform }}
+          enable_security_scan: ${{ matrix.test_platform == 'linux/amd64' && 'true' || 'false' }} # Only scan AMD64 to avoid duplication
+          enable_attestations: "false"
+          trivy_category: trivy-${{ matrix.container }}-${{ matrix.test_platform }}
+          test_image_tag: test-image:latest
+
+  # Build and push production images (all platforms)
+  build-production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180 # Extended timeout for multi-platform production builds
+    name: ${{ matrix.app }}-${{ matrix.version }}-${{ matrix.platform }}
+    needs: [discover-containers, generate-platform-matrix, build-and-test]
+    if: |
+      needs.discover-containers.outputs.has_changes == 'true' &&
+      needs.build-and-test.result == 'success' &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+       (github.event_name == 'workflow_dispatch' && github.event.inputs.push_images == 'true'))
+    strategy:
+      fail-fast: false
+      max-parallel: 2 # Limit parallelism for resource-intensive multi-platform builds
       matrix:
         include: ${{ fromJSON(needs.discover-containers.outputs.matrix) }}
     permissions:
@@ -187,38 +307,19 @@ jobs:
           event_name: ${{ github.event_name }}
           ref: ${{ github.ref }}
           sha: ${{ github.sha }}
-          is_production: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && github.event.inputs.push_images == 'true') }}
+          is_production: "true"
 
-      - name: Build and test container (local)
-        id: build-test
-        uses: ./.github/actions/docker-build
-        with:
-          container_path: ${{ matrix.container }}
-          image_tags: ${{ steps.build-metadata.outputs.tags }}
-          image_labels: ${{ steps.build-metadata.outputs.labels }}
-          build_platforms: linux/amd64
-          push_image: "false"
-          load_image: "true"
-          cache_scope: build-${{ matrix.app }}-${{ matrix.version }}-${{ matrix.platform }}
-          enable_security_scan: "true"
-          enable_attestations: "false"
-          trivy_category: trivy-${{ matrix.container }}
-          test_image_tag: test-image:latest
-
-      - name: Build and push production image
+      - name: Build and push production image (all platforms)
         id: build-production
-        if: |
-          (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-          (github.event_name == 'workflow_dispatch' && github.event.inputs.push_images == 'true')
         uses: ./.github/actions/docker-build
         with:
           container_path: ${{ matrix.container }}
           image_tags: ${{ steps.build-metadata.outputs.tags }}
           image_labels: ${{ steps.build-metadata.outputs.labels }}
-          build_platforms: ${{ env.BUILD_PLATFORMS }}
+          build_platforms: ${{ needs.generate-platform-matrix.outputs.production_platforms }}
           push_image: "true"
           load_image: "false"
-          cache_scope: build-${{ matrix.app }}-${{ matrix.version }}-${{ matrix.platform }}
+          cache_scope: build-${{ matrix.app }}-${{ matrix.version }}-${{ matrix.platform }}-production
           registry_username: ${{ github.actor }}
           registry_password: ${{ secrets.GITHUB_TOKEN }}
           enable_security_scan: "false"
@@ -269,10 +370,11 @@ jobs:
           image_ref="${{ steps.build-metadata.outputs.image_name }}@${{ steps.build-production.outputs.image_digest }}"
 
           {
-            echo "## 📦 Build Artifacts for ${{ matrix.container }}"
+            echo "## 📦 Production Build Artifacts for ${{ matrix.container }}"
             echo "**Image:** \`${image_ref}\`"
             echo "**Tags:** ${{ steps.build-metadata.outputs.tags }}"
             echo "**Digest:** \`${{ steps.build-production.outputs.image_digest }}\`"
+            echo "**Platforms:** \`${{ needs.generate-platform-matrix.outputs.production_platforms }}\`"
             echo ""
             echo "### 🔒 Security Features Enabled"
             echo "- ✅ **SBOM Generated**: Software Bill of Materials created and attested"
@@ -280,6 +382,7 @@ jobs:
             echo "- ✅ **Image Signed**: Container image signed with Cosign"
             echo "- ✅ **GitHub Attestations**: Build provenance and SBOM attestations available"
             echo "- ✅ **Registry Integration**: Attestations pushed to container registry"
+            echo "- ✅ **Multi-Platform**: Built for ${{ needs.generate-platform-matrix.outputs.production_platforms }}"
             echo ""
             echo "### 🔍 Verification Commands"
             echo '```bash'
@@ -298,7 +401,7 @@ jobs:
   build-summary:
     runs-on: ubuntu-latest
     name: Build Summary
-    needs: [discover-containers, build-and-test]
+    needs: [discover-containers, build-and-test, build-production]
     if: always()
     permissions:
       statuses: write
@@ -331,6 +434,12 @@ jobs:
             } else if ('${{ needs.build-and-test.result }}' !== 'success') {
               state = 'error';
               description = 'Container build or tests failed';
+            } else if ('${{ needs.build-production.result }}' === 'skipped') {
+              state = 'success';
+              description = 'Containers tested successfully (production build skipped)';
+            } else if ('${{ needs.build-production.result }}' !== 'success' && '${{ needs.build-production.result }}' !== 'skipped') {
+              state = 'error';
+              description = 'Production build failed';
             }
 
             // Determine SHA for status
@@ -351,6 +460,10 @@ jobs:
               [{data: 'Status', header: true}, {data: 'Value', header: true}],
               ['Build Status', state === 'success' ? '✅ Success' : '❌ Failed'],
               ['Containers Changed', '${{ needs.discover-containers.outputs.has_changes }}'],
+              ['Test Build Status', '${{ needs.build-and-test.result }}' === 'success' ? '✅ Passed' : '${{ needs.build-and-test.result }}' === 'skipped' ? '⏭️ Skipped' : '❌ Failed'],
+              ['Production Build Status', '${{ needs.build-production.result }}' === 'success' ? '✅ Passed' : '${{ needs.build-production.result }}' === 'skipped' ? '⏭️ Skipped' : '❌ Failed'],
+              ['Test Platforms', 'linux/amd64, linux/arm64'],
+              ['Production Platforms', '${{ env.BUILD_PLATFORMS }}'],
               ['Workflow Run', `[#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})`],
               ['Triggered By', '${{ github.actor }}'],
               ['Event', '${{ github.event_name }}']
