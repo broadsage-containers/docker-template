@@ -321,7 +321,12 @@ jobs:
           enable_security_scan: "false"
           enable_attestations: "true"
 
-      # 4. Sign Container Image with Cosign
+      # 4. Install Cosign
+      - name: Install Cosign
+        if: steps.build-production.outcome == 'success'
+        uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0
+
+      # 5. Sign Container Image with Cosign
       - name: Sign container image with Cosign
         if: steps.build-production.outcome == 'success'
         env:
@@ -342,7 +347,7 @@ jobs:
 
                     echo "✅ Image signed successfully"
 
-      # 5. Generate SBOM with Anchore Syft
+      # 6. Generate SBOM with Anchore Syft
       - name: Generate SBOM
         if: steps.build-production.outcome == 'success'
         uses: anchore/sbom-action@da167eac915b4e86f08b264dbdbc867b61be6f0c # v0.20.5
@@ -351,7 +356,7 @@ jobs:
           format: spdx-json
           output-file: sbom.spdx.json
 
-      # 6. Create GitHub SBOM Attestation
+      # 7. Create GitHub SBOM Attestation
       - name: Create GitHub SBOM Attestation
         if: steps.build-production.outcome == 'success'
         uses: actions/attest-sbom@5026d3663739160db546203eeaffa6aa1c51a4d6 # v1.4.1
@@ -361,7 +366,7 @@ jobs:
           sbom-path: sbom.spdx.json
           push-to-registry: true
 
-      # 7. Create GitHub Build Provenance Attestation (SLSA Level 3)
+      # 8. Create GitHub Build Provenance Attestation (SLSA Level 3)
       - name: Create GitHub Build Provenance Attestation
         if: steps.build-production.outcome == 'success'
         uses: actions/attest-build-provenance@1c608d11d69870c2092266b3f9a6f3abbf17002c # v1.4.3
@@ -370,7 +375,7 @@ jobs:
           subject-digest: ${{ steps.build-production.outputs.image_digest }}
           push-to-registry: true
 
-      # 8. Verify Attestations
+      # 9. Verify Attestations
 
       - name: Verify signed image with strict policy
         if: steps.build-production.outcome == 'success'
