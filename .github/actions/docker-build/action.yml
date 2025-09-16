@@ -84,7 +84,7 @@ runs:
         install: true
         driver-opts: |
           network=host
-        config-inline: |
+        buildkitd-config-inline: |
           [worker.oci]
             max-parallelism = 1
           [worker.containerd]
