@@ -22,7 +22,7 @@ concurrency:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAMESPACE: ${{ github.repository_owner }}
-  BUILD_PLATFORMS: linux/amd64,linux/arm64
+  BUILD_PLATFORMS: linux/amd64
 
 jobs:
   # Matrix generation job to discover containers to build
