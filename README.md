@@ -108,6 +108,67 @@ docker run -p 27017:27017 ghcr.io/broadsage/mongodb:7.0
 docker run -p 5432:5432 -e POSTGRES_PASSWORD=mypassword ghcr.io/broadsage/postgresql:16
 ```
 
+## 🔐 Enhanced Security Features
+
+All Broadsage containers are built with enterprise-grade security:
+
+### **Signature Verification**
+
+Every production image is cryptographically signed and can be verified:
+
+```bash
+# Quick verification
+./scripts/verify-image.sh ghcr.io/broadsage/nginx:latest
+
+# Manual verification with Cosign
+cosign verify ghcr.io/broadsage/nginx:latest \
+  --certificate-identity="https://github.com/broadsage/containers/.github/workflows/release-pipeline.yml@refs/heads/main" \
+  --certificate-oidc-issuer="https://token.actions.githubusercontent.com"
+```
+
+### **Software Bill of Materials (SBOM)**
+
+Download and inspect the complete software inventory:
+
+```bash
+# Download SBOM
+cosign download sbom ghcr.io/broadsage/nginx:latest > nginx-sbom.json
+
+# View package summary
+jq -r '.packages[] | "\(.name): \(.versionInfo)"' nginx-sbom.json | head -10
+```
+
+### **🚦 Verification Requirements**
+
+Image verification is **optional by default** but **highly recommended**:
+
+- ✅ **Development**: Use images directly - `docker run ghcr.io/broadsage/nginx:latest`
+- ⚠️ **Staging**: Optional verification - `./scripts/verify-image.sh <image>`
+- 🔒 **Production**: Mandatory verification via CI/CD or admission controllers
+- 🏛️ **Regulated**: Policy enforcement prevents unsigned images
+
+```bash
+# Make verification mandatory for your environment
+./scripts/enforce-verification.sh k8s-policy      # Kubernetes admission controller
+./scripts/enforce-verification.sh docker-trust   # Docker Content Trust  
+./scripts/enforce-verification.sh ci-pipeline    # CI/CD templates
+```
+
+### **Security Features**
+
+- ✅ **Keyless Signing**: Uses Sigstore for tamper-evident signatures
+- ✅ **Build Provenance**: Complete build metadata and source traceability  
+- ✅ **SBOM Attestation**: Verified software bill of materials
+- ✅ **Vulnerability Scanning**: Automated security scanning with Trivy
+- ✅ **Policy Enforcement**: Kubernetes admission controller policies
+- ✅ **Multi-Platform Signing**: Signatures for all supported architectures
+
+📖 **Documentation:**
+
+- **[Complete Verification Guide](docs/image-verification.md)** - Detailed verification instructions
+- **[Verification Requirements](docs/verification-requirements.md)** - When verification is needed  
+- **[Security Policy](SECURITY.md)** - Report security issues
+
 ## 📁 Project Structure
 
 ```bash

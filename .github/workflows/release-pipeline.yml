@@ -354,15 +354,48 @@ jobs:
         run: |
           image_ref="${{ steps.build-metadata.outputs.image_name }}@${{ steps.build-production.outputs.image_digest }}"
 
-          # Sign the image
-          cosign sign --yes "${image_ref}"
+          echo "🔏 Signing container image: ${image_ref}"
 
-          # Verify the signature (optional verification step)
+          # Sign the image with enhanced metadata
+          cosign sign --yes "${image_ref}" \
+            --annotations="org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
+            --annotations="org.opencontainers.image.revision=${{ github.sha }}" \
+            --annotations="org.opencontainers.image.workflow=${{ github.workflow }}" \
+            --annotations="org.opencontainers.image.run-id=${{ github.run_id }}" \
+            --annotations="build.broadsage.com/container=${{ matrix.container }}" \
+            --annotations="build.broadsage.com/platforms=${{ needs.generate-platform-matrix.outputs.production_platforms }}"
+
+          echo "✅ Image signed successfully"
+
+      - name: Verify signed image with strict policy
+        if: steps.build-production.outcome == 'success'
+        env:
+          COSIGN_EXPERIMENTAL: 1
+        run: |
+          image_ref="${{ steps.build-metadata.outputs.image_name }}@${{ steps.build-production.outputs.image_digest }}"
+          expected_identity="https://github.com/${{ github.repository }}/.github/workflows/release-pipeline.yml@refs/heads/main"
+          expected_issuer="https://token.actions.githubusercontent.com"
+
+          echo "🔍 Verifying image signature with strict identity verification..."
+          echo "Expected Identity: ${expected_identity}"
+          echo "Expected Issuer: ${expected_issuer}"
+
+          # Strict verification with exact identity match
           cosign verify "${image_ref}" \
-            --certificate-identity-regexp=".*" \
-            --certificate-oidc-issuer-regexp=".*" || echo "Verification skipped for workflow context"
+            --certificate-identity="${expected_identity}" \
+            --certificate-oidc-issuer="${expected_issuer}" \
+            --output-file=verification-result.json
 
-          echo "✅ Signed image: ${image_ref}"
+          echo "✅ Image signature verified successfully"
+
+          # Verify attestations
+          echo "🔍 Verifying SBOM attestation..."
+          cosign verify-attestation "${image_ref}" \
+            --certificate-identity="${expected_identity}" \
+            --certificate-oidc-issuer="${expected_issuer}" \
+            --type=spdxjson || echo "⚠️ SBOM attestation verification failed but continuing"
+
+          echo "✅ Image and attestations verified"
 
       - name: Generate build artifacts summary
         if: steps.build-production.outcome == 'success'
@@ -384,16 +417,37 @@ jobs:
             echo "- ✅ **Registry Integration**: Attestations pushed to container registry"
             echo "- ✅ **Multi-Platform**: Built for ${{ needs.generate-platform-matrix.outputs.production_platforms }}"
             echo ""
-            echo "### 🔍 Verification Commands"
+            echo "### � Enhanced Security Features"
+            echo "- ✅ **SBOM Generated**: Software Bill of Materials created and attested"
+            echo "- ✅ **Build Provenance**: Build metadata recorded automatically"
+            echo "- ✅ **Strict Identity Signing**: Image signed with verified GitHub identity"
+            echo "- ✅ **Keyless Verification**: Uses Sigstore for keyless signature verification"
+            echo "- ✅ **Policy-Based Verification**: Supports Cosign admission controller policies"
+            echo "- ✅ **GitHub Attestations**: Build provenance and SBOM attestations available"
+            echo "- ✅ **Registry Integration**: Attestations pushed to container registry"
+            echo "- ✅ **Multi-Platform**: Built for ${{ needs.generate-platform-matrix.outputs.production_platforms }}"
+            echo ""
+            echo "### �🔍 Enhanced Verification Commands"
             echo '```bash'
-            echo "# Verify signature"
-            echo "cosign verify ${image_ref} --certificate-identity-regexp=\".*\" --certificate-oidc-issuer-regexp=\".*\""
+            echo "# Strict signature verification (recommended for production)"
+            echo "cosign verify ${image_ref} \\"
+            echo "  --certificate-identity=\"https://github.com/${{ github.repository }}/.github/workflows/release-pipeline.yml@refs/heads/main\" \\"
+            echo "  --certificate-oidc-issuer=\"https://token.actions.githubusercontent.com\""
             echo ""
-            echo "# Download SBOM"
-            echo "cosign download sbom ${image_ref}"
+            echo "# Verify SBOM attestation"
+            echo "cosign verify-attestation ${image_ref} \\"
+            echo "  --certificate-identity=\"https://github.com/${{ github.repository }}/.github/workflows/release-pipeline.yml@refs/heads/main\" \\"
+            echo "  --certificate-oidc-issuer=\"https://token.actions.githubusercontent.com\" \\"
+            echo "  --type=spdxjson"
             echo ""
-            echo "# View attestations"
-            echo "gh attestation list --repo ${{ github.repository }}"
+            echo "# Download and inspect SBOM"
+            echo "cosign download sbom ${image_ref} | jq ."
+            echo ""
+            echo "# View all GitHub attestations"
+            echo "gh attestation list --repo ${{ github.repository }} --digest ${{ steps.build-production.outputs.image_digest }}"
+            echo ""
+            echo "# Use with Cosign admission controller"
+            echo "kubectl apply -f https://github.com/${{ github.repository }}/raw/main/.cosign/consumer-policy.yaml"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 

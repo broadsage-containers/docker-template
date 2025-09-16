@@ -297,31 +297,46 @@ jobs:
       - name: Sign container image with Cosign
         uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0
 
-      - name: Sign the published Docker image
+      - name: Sign the published Docker image with enhanced metadata
         env:
           COSIGN_EXPERIMENTAL: 1
         run: |
           set -euo pipefail
 
           image_ref="${{ steps.build-metadata.outputs.image_name }}@${{ steps.build-publish.outputs.image_digest }}"
-          echo "🔏 Signing container image: $image_ref"
+          pr_head_branch="${{ github.event.workflow_run.head_branch }}"
 
-          # Sign the image
-          cosign sign --yes "$image_ref"
+          echo "🔏 Signing PR container image: $image_ref"
+          echo "PR Branch: $pr_head_branch"
+
+          # Sign the image with PR-specific metadata
+          cosign sign --yes "$image_ref" \
+            --annotations="org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
+            --annotations="org.opencontainers.image.revision=${{ github.sha }}" \
+            --annotations="org.opencontainers.image.workflow=${{ github.workflow }}" \
+            --annotations="org.opencontainers.image.run-id=${{ github.run_id }}" \
+            --annotations="pr.broadsage.com/number=${{ needs.pr-info-and-security.outputs.pr_number }}" \
+            --annotations="pr.broadsage.com/head-sha=${{ needs.pr-info-and-security.outputs.pr_head_sha }}" \
+            --annotations="pr.broadsage.com/branch=${pr_head_branch}" \
+            --annotations="build.broadsage.com/type=approved-pr"
+
           echo "✅ Image signed successfully"
 
-          # Add attestation with build metadata
-          echo "📋 Adding build attestation..."
+          # Add enhanced build attestation with PR context
+          echo "📋 Adding enhanced build attestation..."
           cosign attest --yes --predicate <(cat <<EOF
           {
-            "buildType": "github-actions",
+            "buildType": "github-actions-pr",
             "builder": {
               "id": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
             },
             "metadata": {
               "buildInvocationID": "${{ github.run_id }}-${{ github.run_number }}",
               "buildStartedOn": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-              "reproducible": false
+              "reproducible": false,
+              "pr_number": "${{ needs.pr-info-and-security.outputs.pr_number }}",
+              "pr_head_sha": "${{ needs.pr-info-and-security.outputs.pr_head_sha }}",
+              "pr_branch": "${pr_head_branch}"
             },
             "materials": [
               {
@@ -334,6 +349,26 @@ jobs:
           }
           EOF
           ) "$image_ref" || echo "⚠️ Attestation failed but continuing"
+
+      - name: Verify PR image signature
+        env:
+          COSIGN_EXPERIMENTAL: 1
+        run: |
+          image_ref="${{ steps.build-metadata.outputs.image_name }}@${{ steps.build-publish.outputs.image_digest }}"
+          expected_identity_pattern="https://github.com/${{ github.repository }}/.github/workflows/pr-publish.yml@refs/heads/*"
+          expected_issuer="https://token.actions.githubusercontent.com"
+
+          echo "🔍 Verifying PR image signature..."
+          echo "Expected Identity Pattern: ${expected_identity_pattern}"
+          echo "Expected Issuer: ${expected_issuer}"
+
+          # Verify with regex for PR branches
+          cosign verify "${image_ref}" \
+            --certificate-identity-regexp="https://github.com/${{ github.repository }}/.github/workflows/pr-publish.yml@refs/heads/.*" \
+            --certificate-oidc-issuer="${expected_issuer}" \
+            --output-file=pr-verification-result.json
+
+          echo "✅ PR image signature verified successfully"
 
       - name: Run security scan with Trivy
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # master

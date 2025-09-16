@@ -1,0 +1,54 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage <opensource@broadsage.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# Simplified Cosign Verification Policy for Broadsage Container Consumers
+# This policy can be used by organizations and individuals who want to verify
+# Broadsage container images before deployment.
+
+apiVersion: policy.sigstore.dev/v1beta1
+kind: ClusterImagePolicy
+metadata:
+  name: broadsage-consumer-policy
+  annotations:
+    description: "Consumer-friendly verification policy for Broadsage containers"
+    version: "1.0.0"
+    documentation: "https://github.com/broadsage/containers/docs/image-verification.md"
+spec:
+  images:
+    # Only Broadsage official images
+    - glob: "ghcr.io/broadsage/*"
+
+  authorities:
+    # Only accept production releases
+    - name: "broadsage-official-releases"
+      keyless:
+        url: https://fulcio.sigstore.dev
+        identities:
+          - issuer: "https://token.actions.githubusercontent.com"
+            subject: "https://github.com/broadsage/containers/.github/workflows/release-pipeline.yml@refs/heads/main"
+        ctlog:
+          url: https://rekor.sigstore.dev
+
+      # Require attestations for all production images
+      attestations:
+        - name: "software-bill-of-materials"
+          predicateType: "https://spdx.dev/Document"
+        - name: "build-provenance"
+          predicateType: "https://slsa.dev/provenance/v0.2"
+
+  # Strict enforcement for consumer environments
+  mode: enforce
+
+  # Require transparency log entries
+  requireRekorBundle: true
+
+  # Additional security checks
+  policy:
+    - match:
+        - glob: "ghcr.io/broadsage/*"
+      requirements:
+        - authorities: ["broadsage-official-releases"]
+          attestations:
+            - predicateType: "https://spdx.dev/Document"
+            - predicateType: "https://slsa.dev/provenance/v0.2"
