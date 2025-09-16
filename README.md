@@ -163,6 +163,48 @@ Image verification is **optional by default** but **highly recommended**:
 - ✅ **Policy Enforcement**: Kubernetes admission controller policies
 - ✅ **Multi-Platform Signing**: Signatures for all supported architectures
 
+### **Modern Supply Chain Security Stack**
+
+Broadsage containers use a hybrid attestation approach for maximum compatibility:
+
+#### **Dual SBOM Attestation Strategy**
+
+```bash
+# Primary: GitHub Actions native attestation (recommended)
+gh attestation verify oci://ghcr.io/broadsage/nginx:latest --repo broadsage/containers
+
+# Secondary: Cosign universal attestation (broad compatibility)  
+cosign verify-attestation ghcr.io/broadsage/nginx:latest \
+  --type="https://spdx.dev/Document" \
+  --certificate-identity="..." --certificate-oidc-issuer="..."
+```
+
+#### **SBOM Generation with Syft**
+
+We use **Anchore Syft v0.17.2** for modern, accurate SBOM generation:
+
+- **Multiple formats**: SPDX JSON, CycloneDX JSON, Syft native JSON
+- **Comprehensive scanning**: OS packages, language dependencies, container layers
+- **Continuous updates**: Latest vulnerability database integration
+
+#### **SLSA Level 3 Pathway**
+
+Building towards **SLSA Level 3** compliance:
+
+- ✅ **Verified source integrity**: GitHub source attestation
+- ✅ **Build environment isolation**: Hardened GitHub Actions runners
+- ✅ **Complete provenance**: Build metadata and dependency tracking
+- 🔄 **Two-party review**: PR approval and automated verification
+- 🔄 **Hermetic builds**: Reproducible build environment (in progress)
+
+#### **Technology Stack**
+
+- **Signing**: [Sigstore Cosign](https://github.com/sigstore/cosign) (keyless, OIDC-based)
+- **SBOM Generation**: [Anchore Syft](https://github.com/anchore/syft) (modern, multi-format)
+- **Attestation**: [GitHub Actions Attestations](https://docs.github.com/en/actions/security-guides/using-artifact-attestations-to-establish-provenance-for-builds) + Cosign universal compatibility
+- **Verification**: Custom scripts with fallback mechanisms
+- **Vulnerability Scanning**: [Aqua Trivy](https://github.com/aquasecurity/trivy) (comprehensive database)
+
 📖 **Documentation:**
 
 - **[Complete Verification Guide](docs/image-verification.md)** - Detailed verification instructions

@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Cosign Cluster Image Policy for Broadsage Containers
-# This policy ensures that container images are properly signed and verified
-# according to enterprise security standards.
+# This policy focuses on signature verification only.
+# Attestations (SBOM, build provenance) are handled by GitHub Actions natively.
 
 apiVersion: policy.sigstore.dev/v1beta1
 kind: ClusterImagePolicy
@@ -30,9 +30,6 @@ spec:
           # Release pipeline workflow
           - issuer: "https://token.actions.githubusercontent.com"
             subject: "https://github.com/broadsage/containers/.github/workflows/release-pipeline.yml@refs/heads/main"
-          # Manual workflow dispatch from main
-          - issuer: "https://token.actions.githubusercontent.com"
-            subject: "https://github.com/broadsage/containers/.github/workflows/release-pipeline.yml@refs/heads/main"
         ctlog:
           url: https://rekor.sigstore.dev
 
@@ -46,12 +43,6 @@ spec:
             subjectRegExp: "^https://github.com/broadsage/containers/.github/workflows/pr-publish.yml@refs/heads/.*"
         ctlog:
           url: https://rekor.sigstore.dev
-      # Additional requirements for PR builds
-      attestations:
-        - name: "build-provenance"
-          predicateType: "https://slsa.dev/provenance/v0.2"
-        - name: "sbom"
-          predicateType: "https://spdx.dev/Document"
 
   # Policy mode - enforce for production, warn for development
   mode: enforce
@@ -59,19 +50,16 @@ spec:
   # Additional security requirements
   requireRekorBundle: true
 
-  # Match specific image patterns with different policies
+  # Match specific image patterns with signature-only verification
   policy:
-    # Production images require stricter verification
+    # Production images require signature verification only
     - match:
         - glob: "ghcr.io/broadsage/*:v*" # Version tags
         - glob: "ghcr.io/broadsage/*:latest" # Latest tags
       requirements:
         - authorities: ["broadsage-production-releases"]
-          attestations:
-            - predicateType: "https://slsa.dev/provenance/v0.2"
-            - predicateType: "https://spdx.dev/Document"
 
-    # Development/PR images have relaxed requirements
+    # Development/PR images with relaxed requirements
     - match:
         - glob: "ghcr.io/broadsage/*:pr-*"
         - glob: "ghcr.io/broadsage/*:dev-*"

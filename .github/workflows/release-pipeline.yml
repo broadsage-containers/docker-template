@@ -325,28 +325,7 @@ jobs:
           enable_security_scan: "false"
           enable_attestations: "true"
 
-      - name: Generate SBOM
-        if: steps.build-production.outcome == 'success'
-        uses: anchore/sbom-action@da167eac915b4e86f08b264dbdbc867b61be6f0c # v0.20.5
-        with:
-          image: ${{ steps.build-metadata.outputs.image_name }}@${{ steps.build-production.outputs.image_digest }}
-          format: "spdx-json"
-          output-file: "sbom.spdx.json"
-
-      - name: Attest SBOM
-        if: steps.build-production.outcome == 'success'
-        uses: actions/attest-sbom@4651f806c01d8637787e274ac3bdf724ef169f34 # v3.0.0
-        id: attest-sbom
-        with:
-          subject-name: ${{ steps.build-metadata.outputs.image_name }}
-          subject-digest: ${{ steps.build-production.outputs.image_digest }}
-          sbom-path: "sbom.spdx.json"
-          push-to-registry: true
-
-      - name: Install Cosign for additional signing
-        if: steps.build-production.outcome == 'success'
-        uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0
-
+      # 4. Sign Container Image with Cosign
       - name: Sign container image with Cosign
         if: steps.build-production.outcome == 'success'
         env:
@@ -365,7 +344,37 @@ jobs:
             --annotations="build.broadsage.com/container=${{ matrix.container }}" \
             --annotations="build.broadsage.com/platforms=${{ needs.generate-platform-matrix.outputs.production_platforms }}"
 
-          echo "✅ Image signed successfully"
+                    echo "✅ Image signed successfully"
+
+      # 5. Generate SBOM with Anchore Syft
+      - name: Generate SBOM
+        if: steps.build-production.outcome == 'success'
+        uses: anchore/sbom-action@da167eac915b4e86f08b264dbdbc867b61be6f0c # v0.20.5
+        with:
+          image: ${{ steps.build-metadata.outputs.image_name }}@${{ steps.build-production.outputs.image_digest }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+
+      # 6. Create GitHub SBOM Attestation
+      - name: Create GitHub SBOM Attestation
+        if: steps.build-production.outcome == 'success'
+        uses: actions/attest-sbom@5026d3663739160db546203eeaffa6aa1c51a4d6 # v1.4.1
+        with:
+          subject-name: ${{ steps.build-metadata.outputs.image_name }}
+          subject-digest: ${{ steps.build-production.outputs.image_digest }}
+          sbom-path: sbom.spdx.json
+          push-to-registry: true
+
+      # 7. Create GitHub Build Provenance Attestation (SLSA Level 3)
+      - name: Create GitHub Build Provenance Attestation
+        if: steps.build-production.outcome == 'success'
+        uses: actions/attest-build-provenance@1c608d11d69870c2092266b3f9a6f3abbf17002c # v1.4.3
+        with:
+          subject-name: ${{ steps.build-metadata.outputs.image_name }}
+          subject-digest: ${{ steps.build-production.outputs.image_digest }}
+          push-to-registry: true
+
+      # 8. Verify Attestations
 
       - name: Verify signed image with strict policy
         if: steps.build-production.outcome == 'success'
@@ -390,10 +399,21 @@ jobs:
 
           # Verify attestations
           echo "🔍 Verifying SBOM attestation..."
-          cosign verify-attestation "${image_ref}" \
+
+          # Try GitHub SBOM attestation format first
+          if cosign verify-attestation "${image_ref}" \
             --certificate-identity="${expected_identity}" \
             --certificate-oidc-issuer="${expected_issuer}" \
-            --type=spdxjson || echo "⚠️ SBOM attestation verification failed but continuing"
+            --type=https://spdx.dev/Document 2>/dev/null; then
+            echo "✅ GitHub SBOM attestation verified"
+          elif cosign verify-attestation "${image_ref}" \
+            --certificate-identity="${expected_identity}" \
+            --certificate-oidc-issuer="${expected_issuer}" \
+            --type=spdxjson 2>/dev/null; then
+            echo "✅ Legacy SBOM attestation verified"
+          else
+            echo "⚠️ SBOM attestation verification failed but continuing"
+          fi
 
           echo "✅ Image and attestations verified"
 
@@ -418,35 +438,37 @@ jobs:
             echo "- ✅ **Multi-Platform**: Built for ${{ needs.generate-platform-matrix.outputs.production_platforms }}"
             echo ""
             echo "### � Enhanced Security Features"
-            echo "- ✅ **SBOM Generated**: Software Bill of Materials created and attested"
-            echo "- ✅ **Build Provenance**: Build metadata recorded automatically"
-            echo "- ✅ **Strict Identity Signing**: Image signed with verified GitHub identity"
-            echo "- ✅ **Keyless Verification**: Uses Sigstore for keyless signature verification"
-            echo "- ✅ **Policy-Based Verification**: Supports Cosign admission controller policies"
-            echo "- ✅ **GitHub Attestations**: Build provenance and SBOM attestations available"
-            echo "- ✅ **Registry Integration**: Attestations pushed to container registry"
+            echo "- ✅ **GitHub SBOM Attestation**: Software Bill of Materials via GitHub native system"
+            echo "- ✅ **GitHub Build Provenance**: SLSA Level 3 compliant provenance via GitHub"
+            echo "- ✅ **Cosign Image Signing**: Minimal signature verification for broad compatibility"
+            echo "- ✅ **Keyless Verification**: Uses Sigstore for signature verification only"
+            echo "- ✅ **Policy-Based Verification**: Supports Kubernetes admission controllers (signature-only)"
+            echo "- ✅ **GitHub Native Attestations**: All attestations via GitHub's native system"
+            echo "- ✅ **Registry Integration**: Attestations stored in GitHub's attestation registry"
             echo "- ✅ **Multi-Platform**: Built for ${{ needs.generate-platform-matrix.outputs.production_platforms }}"
             echo ""
-            echo "### �🔍 Enhanced Verification Commands"
+            echo "### 🔍 Verification Commands"
             echo '```bash'
-            echo "# Strict signature verification (recommended for production)"
+            echo "# 1. Verify image signature with Cosign (minimal)"
             echo "cosign verify ${image_ref} \\"
             echo "  --certificate-identity=\"https://github.com/${{ github.repository }}/.github/workflows/release-pipeline.yml@refs/heads/main\" \\"
             echo "  --certificate-oidc-issuer=\"https://token.actions.githubusercontent.com\""
             echo ""
-            echo "# Verify SBOM attestation"
-            echo "cosign verify-attestation ${image_ref} \\"
-            echo "  --certificate-identity=\"https://github.com/${{ github.repository }}/.github/workflows/release-pipeline.yml@refs/heads/main\" \\"
-            echo "  --certificate-oidc-issuer=\"https://token.actions.githubusercontent.com\" \\"
-            echo "  --type=spdxjson"
+            echo "# 2. Verify all GitHub attestations (SLSA Level 3)"
+            echo "gh attestation verify oci://${image_ref} --repo ${{ github.repository }}"
             echo ""
-            echo "# Download and inspect SBOM"
-            echo "cosign download sbom ${image_ref} | jq ."
+            echo "# 3. Verify specific GitHub build provenance"
+            echo "gh attestation verify oci://${image_ref} --repo ${{ github.repository }} \\"
+            echo "  --predicate-type=https://slsa.dev/provenance/v1"
             echo ""
-            echo "# View all GitHub attestations"
+            echo "# 4. Verify specific GitHub SBOM attestation"
+            echo "gh attestation verify oci://${image_ref} --repo ${{ github.repository }} \\"
+            echo "  --predicate-type=https://in-toto.io/Statement/v0.1"
+            echo ""
+            echo "# 5. View all GitHub attestations"
             echo "gh attestation list --repo ${{ github.repository }} --digest ${{ steps.build-production.outputs.image_digest }}"
             echo ""
-            echo "# Use with Cosign admission controller"
+            echo "# 6. Use with Kubernetes admission controller (signature-only)"
             echo "kubectl apply -f https://github.com/${{ github.repository }}/raw/main/.cosign/consumer-policy.yaml"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

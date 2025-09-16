@@ -287,12 +287,30 @@ jobs:
           enable_security_scan: "true"
           enable_attestations: "true"
 
+      # Generate SBOM for PR Images
       - name: Generate SBOM
         uses: anchore/sbom-action@da167eac915b4e86f08b264dbdbc867b61be6f0c # v0.20.5
         with:
           image: ${{ steps.build-metadata.outputs.image_name }}@${{ steps.build-publish.outputs.image_digest }}
           format: spdx-json
           output-file: sbom.spdx.json
+
+      # Create GitHub SBOM Attestation
+      - name: Create GitHub SBOM Attestation
+        uses: actions/attest-sbom@5026d3663739160db546203eeaffa6aa1c51a4d6 # v1.4.1
+        with:
+          subject-name: ${{ steps.build-metadata.outputs.image_name }}
+          subject-digest: ${{ steps.build-publish.outputs.image_digest }}
+          sbom-path: sbom.spdx.json
+          push-to-registry: true
+
+      # Create GitHub Build Provenance Attestation (SLSA Level 3)
+      - name: Create GitHub Build Provenance Attestation
+        uses: actions/attest-build-provenance@1c608d11d69870c2092266b3f9a6f3abbf17002c # v1.4.3
+        with:
+          subject-name: ${{ steps.build-metadata.outputs.image_name }}
+          subject-digest: ${{ steps.build-publish.outputs.image_digest }}
+          push-to-registry: true
 
       - name: Sign container image with Cosign
         uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0
