@@ -287,12 +287,39 @@ jobs:
           enable_security_scan: "true"
           enable_attestations: "true"
 
+      # Generate SBOM for PR Images
       - name: Generate SBOM
         uses: anchore/sbom-action@da167eac915b4e86f08b264dbdbc867b61be6f0c # v0.20.5
         with:
           image: ${{ steps.build-metadata.outputs.image_name }}@${{ steps.build-publish.outputs.image_digest }}
           format: spdx-json
           output-file: sbom.spdx.json
+
+      # Create GitHub SBOM Attestation
+      - name: Create GitHub SBOM Attestation
+        uses: actions/attest-sbom@5026d3663739160db546203eeaffa6aa1c51a4d6 # v1.4.1
+        with:
+          subject-name: ${{ steps.build-metadata.outputs.image_name }}
+          subject-digest: ${{ steps.build-publish.outputs.image_digest }}
+          sbom-path: sbom.spdx.json
+          push-to-registry: true
+
+      # Create Cosign SBOM Attestation (Universal Compatibility)
+      - name: Create Cosign SBOM Attestation
+        env:
+          COSIGN_EXPERIMENTAL: 1
+        run: |
+          image_ref="${{ steps.build-metadata.outputs.image_name }}@${{ steps.build-publish.outputs.image_digest }}"
+
+          echo "📋 Attaching SBOM attestation with Cosign to: ${image_ref}"
+
+          # Create SBOM attestation with modern type
+          cosign attest --yes \
+            --predicate sbom.spdx.json \
+            --type https://spdx.dev/Document \
+            "${image_ref}"
+
+          echo "✅ Cosign SBOM attestation created"
 
       - name: Sign container image with Cosign
         uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0

@@ -171,7 +171,7 @@ verify_sbom_attestation() {
 
   log_info "Verifying SBOM attestation: $image"
 
-  local verify_cmd="cosign verify-attestation \"$image\" --type=spdxjson"
+  local base_cmd="cosign verify-attestation \"$image\""
   local cosign_opts=""
 
   if [[ -n "$output_file" ]]; then
@@ -179,13 +179,17 @@ verify_sbom_attestation() {
   fi
 
   if [[ "$is_pr_image" == "true" ]]; then
-    verify_cmd="$verify_cmd --certificate-identity-regexp=\"https://github.com/broadsage/containers/.github/workflows/pr-publish.yml@refs/heads/.*\" --certificate-oidc-issuer=\"$EXPECTED_ISSUER\" $cosign_opts"
+    cosign_opts="$cosign_opts --certificate-identity-regexp=\"https://github.com/broadsage/containers/.github/workflows/pr-publish.yml@refs/heads/.*\" --certificate-oidc-issuer=\"$EXPECTED_ISSUER\""
   else
-    verify_cmd="$verify_cmd --certificate-identity=\"$EXPECTED_IDENTITY\" --certificate-oidc-issuer=\"$EXPECTED_ISSUER\" $cosign_opts"
+    cosign_opts="$cosign_opts --certificate-identity=\"$EXPECTED_IDENTITY\" --certificate-oidc-issuer=\"$EXPECTED_ISSUER\""
   fi
 
-  if eval "COSIGN_EXPERIMENTAL=$COSIGN_EXPERIMENTAL $verify_cmd"; then
-    log_success "SBOM attestation verified successfully"
+  # Try GitHub SBOM attestation format first
+  if eval "COSIGN_EXPERIMENTAL=$COSIGN_EXPERIMENTAL $base_cmd --type=https://spdx.dev/Document $cosign_opts" 2>/dev/null; then
+    log_success "GitHub SBOM attestation verified successfully"
+    return 0
+  elif eval "COSIGN_EXPERIMENTAL=$COSIGN_EXPERIMENTAL $base_cmd --type=spdxjson $cosign_opts" 2>/dev/null; then
+    log_success "Legacy SBOM attestation verified successfully"
     return 0
   else
     log_warning "SBOM attestation verification failed (may not be available for all images)"
