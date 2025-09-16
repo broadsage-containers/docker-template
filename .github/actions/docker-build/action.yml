@@ -84,6 +84,11 @@ runs:
         install: true
         driver-opts: |
           network=host
+        config-inline: |
+          [worker.oci]
+            max-parallelism = 1
+          [worker.containerd]
+            max-parallelism = 1
 
     - name: Log in to Container Registry
       if: inputs.push_image == 'true'
