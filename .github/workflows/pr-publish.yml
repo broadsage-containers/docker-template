@@ -279,8 +279,6 @@ jobs:
           image_tags: ${{ steps.build-metadata.outputs.tags }}
           image_labels: ${{ steps.build-metadata.outputs.labels }}
           build_platforms: ${{ env.BUILD_PLATFORMS }}
-          build_args: |
-            TARGETPLATFORM=${{ env.BUILD_PLATFORMS }}
           push_image: "true"
           load_image: "false"
           cache_scope: build-${{ matrix.app }}-${{ matrix.version }}-${{ matrix.platform }}

@@ -4,7 +4,7 @@
 
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
-FROM --platform=$TARGETPLATFORM debian:bookworm-slim
+FROM debian:bookworm-slim
 
 ARG NGINX_VERSION=1.28.0
 ARG TARGETARCH
