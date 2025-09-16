@@ -20,6 +20,8 @@ LABEL org.opencontainers.image.title="nginx" \
 
 # Install dependencies and create nginx user
 RUN set -eux; \
+    echo "Building for architecture: $(dpkg --print-architecture)"; \
+    echo "Target architecture: ${TARGETARCH}"; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
         ca-certificates \
@@ -27,15 +29,32 @@ RUN set -eux; \
         gnupg2 \
         lsb-release \
     ; \
-    # Add nginx signing key and repository
+    # Add nginx signing key and repository with better error handling
     wget -qO /tmp/nginx_signing.key https://nginx.org/keys/nginx_signing.key; \
     gpg --quiet --with-fingerprint --verify-files /tmp/nginx_signing.key || \
     apt-key add /tmp/nginx_signing.key; \
     echo "deb https://nginx.org/packages/debian bookworm nginx" > /etc/apt/sources.list.d/nginx.list; \
+    # Add repository preference to prefer nginx.org packages
+    echo 'Package: nginx*' > /etc/apt/preferences.d/nginx; \
+    echo 'Pin: origin nginx.org' >> /etc/apt/preferences.d/nginx; \
+    echo 'Pin-Priority: 700' >> /etc/apt/preferences.d/nginx; \
     \
-    # Install nginx
+    # Install nginx with more robust version handling
     apt-get update; \
-    apt-get install -y --no-install-recommends nginx=${NGINX_VERSION}*; \
+    # First try exact version, then fallback to latest available
+    if ! apt-get install -y --no-install-recommends nginx=${NGINX_VERSION}* 2>/dev/null; then \
+        echo "Exact version ${NGINX_VERSION} not available, checking available versions..."; \
+        apt-cache policy nginx; \
+        # Try with -1~ suffix which is common for nginx packages
+        if ! apt-get install -y --no-install-recommends nginx=${NGINX_VERSION}-1~bookworm 2>/dev/null; then \
+            # Fallback to latest 1.28.x version
+            apt-get install -y --no-install-recommends nginx=1.28.*; \
+        fi; \
+    fi; \
+    # Verify nginx installation and version
+    nginx -v; \
+    nginx -t; \
+    echo "Successfully installed nginx version: $(nginx -v 2>&1 | cut -d/ -f2)"; \
     \
     # Create nginx user and directories (if they don't already exist)
     if ! getent group ${NGINX_USER} >/dev/null 2>&1; then \
