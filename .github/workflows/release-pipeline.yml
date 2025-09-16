@@ -117,11 +117,10 @@ jobs:
           # Define platform groups
           TEST_PLATFORMS="linux/amd64,linux/arm64"  # Fast platforms for testing
           PRODUCTION_PLATFORMS="${{ env.BUILD_PLATFORMS }}"  # All platforms for production
-          
           # Get container matrix from previous job
           CONTAINERS='${{ needs.discover-containers.outputs.matrix }}'
           echo "Containers to process: $CONTAINERS"
-          
+
           # Generate combined test matrix (containers × test platforms) using jq
           test_matrix=$(echo "$CONTAINERS" | jq -c --arg test_platforms "$TEST_PLATFORMS" '
             . as $containers |
@@ -132,9 +131,9 @@ jobs:
               ($container + {"test_platform": $test_platform})
             ]
           ')
-          
+
           echo "Test matrix: $test_matrix"
-          
+
           {
             echo "test_matrix=$test_matrix"
             echo "test_platforms=$TEST_PLATFORMS"
