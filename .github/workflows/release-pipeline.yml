@@ -365,27 +365,16 @@ jobs:
           sbom-path: sbom.spdx.json
           push-to-registry: true
 
-      # 7. Create Cosign SBOM Attestation (Universal Compatibility)
-      - name: Create Cosign SBOM Attestation
+      # 7. Create GitHub Build Provenance Attestation (SLSA Level 3)
+      - name: Create GitHub Build Provenance Attestation
         if: steps.build-production.outcome == 'success'
-        env:
-          COSIGN_EXPERIMENTAL: 1
-        run: |
-          image_ref="${{ steps.build-metadata.outputs.image_name }}@${{ steps.build-production.outputs.image_digest }}"
+        uses: actions/attest-build-provenance@1c608d11d69870c2092266b3f9a6f3abbf17002c # v1.4.3
+        with:
+          subject-name: ${{ steps.build-metadata.outputs.image_name }}
+          subject-digest: ${{ steps.build-production.outputs.image_digest }}
+          push-to-registry: true
 
-          echo "📋 Attaching SBOM attestation to: ${image_ref}"
-
-          # Create SBOM attestation with modern type
-          cosign attest --yes \
-            --predicate sbom.spdx.json \
-            --type https://spdx.dev/Document \
-            "${image_ref}"
-
-          echo "✅ Cosign SBOM attestation created"
-
-      # 9. Verify Attestations
-
-      # 8. Generate and Attach SLSA Provenance
+      # 8. Verify Attestations
 
       - name: Verify signed image with strict policy
         if: steps.build-production.outcome == 'success'
@@ -465,11 +454,11 @@ jobs:
             echo "  --certificate-identity=\"https://github.com/${{ github.repository }}/.github/workflows/release-pipeline.yml@refs/heads/main\" \\"
             echo "  --certificate-oidc-issuer=\"https://token.actions.githubusercontent.com\""
             echo ""
-            echo "# Verify SBOM attestation"
-            echo "cosign verify-attestation ${image_ref} \\"
-            echo "  --certificate-identity=\"https://github.com/${{ github.repository }}/.github/workflows/release-pipeline.yml@refs/heads/main\" \\"
-            echo "  --certificate-oidc-issuer=\"https://token.actions.githubusercontent.com\" \\"
-            echo "  --type=spdxjson"
+            echo "# Verify GitHub SBOM attestation"
+            echo "gh attestation verify oci://${image_ref} --repo ${{ github.repository }}"
+            echo ""
+            echo "# Verify GitHub build provenance (SLSA Level 3)"
+            echo "gh attestation verify oci://${image_ref} --repo ${{ github.repository }} --predicate-type=https://slsa.dev/provenance/v1"
             echo ""
             echo "# Download and inspect SBOM"
             echo "cosign download sbom ${image_ref} | jq ."

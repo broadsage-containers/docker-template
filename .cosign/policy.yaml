@@ -48,10 +48,8 @@ spec:
           url: https://rekor.sigstore.dev
       # Additional requirements for PR builds
       attestations:
-        - name: "build-provenance"
-          predicateType: "https://slsa.dev/provenance/v0.2"
-        - name: "sbom"
-          predicateType: "https://spdx.dev/Document"
+        - name: "github-build-provenance"
+          predicateType: "https://slsa.dev/attestation/build/v1"
 
   # Policy mode - enforce for production, warn for development
   mode: enforce
@@ -68,8 +66,7 @@ spec:
       requirements:
         - authorities: ["broadsage-production-releases"]
           attestations:
-            - predicateType: "https://slsa.dev/provenance/v0.2"
-            - predicateType: "https://spdx.dev/Document"
+            - predicateType: "https://slsa.dev/attestation/build/v1"
 
     # Development/PR images have relaxed requirements
     - match:

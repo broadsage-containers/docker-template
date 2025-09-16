@@ -304,22 +304,13 @@ jobs:
           sbom-path: sbom.spdx.json
           push-to-registry: true
 
-      # Create Cosign SBOM Attestation (Universal Compatibility)
-      - name: Create Cosign SBOM Attestation
-        env:
-          COSIGN_EXPERIMENTAL: 1
-        run: |
-          image_ref="${{ steps.build-metadata.outputs.image_name }}@${{ steps.build-publish.outputs.image_digest }}"
-
-          echo "📋 Attaching SBOM attestation with Cosign to: ${image_ref}"
-
-          # Create SBOM attestation with modern type
-          cosign attest --yes \
-            --predicate sbom.spdx.json \
-            --type https://spdx.dev/Document \
-            "${image_ref}"
-
-          echo "✅ Cosign SBOM attestation created"
+      # Create GitHub Build Provenance Attestation (SLSA Level 3)
+      - name: Create GitHub Build Provenance Attestation
+        uses: actions/attest-build-provenance@1c608d11d69870c2092266b3f9a6f3abbf17002c # v1.4.3
+        with:
+          subject-name: ${{ steps.build-metadata.outputs.image_name }}
+          subject-digest: ${{ steps.build-publish.outputs.image_digest }}
+          push-to-registry: true
 
       - name: Sign container image with Cosign
         uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0
