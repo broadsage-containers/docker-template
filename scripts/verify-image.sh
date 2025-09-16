@@ -164,36 +164,33 @@ verify_signature() {
   fi
 }
 
-verify_sbom_attestation() {
+verify_github_attestations() {
   local image="$1"
-  local is_pr_image="${2:-false}"
-  local output_file="${3:-}"
+  local output_file="${2:-}"
 
-  log_info "Verifying SBOM attestation: $image"
+  log_info "Verifying GitHub attestations: $image"
 
-  local base_cmd="cosign verify-attestation \"$image\""
-  local cosign_opts=""
-
-  if [[ -n "$output_file" ]]; then
-    cosign_opts="$cosign_opts --output-file=\"$output_file\""
+  # Check if gh CLI is available
+  if ! command -v gh >/dev/null 2>&1; then
+    log_warning "GitHub CLI not found - skipping GitHub attestation verification"
+    log_info "Install with: curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo tee /usr/share/keyrings/githubcli-archive-keyring.gpg >/dev/null && sudo apt update && sudo apt install gh"
+    return 0
   fi
 
-  if [[ "$is_pr_image" == "true" ]]; then
-    cosign_opts="$cosign_opts --certificate-identity-regexp=\"https://github.com/broadsage/containers/.github/workflows/pr-publish.yml@refs/heads/.*\" --certificate-oidc-issuer=\"$EXPECTED_ISSUER\""
-  else
-    cosign_opts="$cosign_opts --certificate-identity=\"$EXPECTED_IDENTITY\" --certificate-oidc-issuer=\"$EXPECTED_ISSUER\""
-  fi
-
-  # Try GitHub SBOM attestation format first
-  if eval "COSIGN_EXPERIMENTAL=$COSIGN_EXPERIMENTAL $base_cmd --type=https://spdx.dev/Document $cosign_opts" 2>/dev/null; then
-    log_success "GitHub SBOM attestation verified successfully"
-    return 0
-  elif eval "COSIGN_EXPERIMENTAL=$COSIGN_EXPERIMENTAL $base_cmd --type=spdxjson $cosign_opts" 2>/dev/null; then
-    log_success "Legacy SBOM attestation verified successfully"
+  # Verify GitHub attestations (comprehensive)
+  if gh attestation verify "oci://$image" --repo broadsage/containers 2>/dev/null; then
+    log_success "GitHub attestations verified successfully"
+    
+    # Show attestation details if verbose
+    if [[ "$VERBOSE" == "1" ]]; then
+      log_info "GitHub Attestation Details:"
+      gh attestation list --repo broadsage/containers --digest "$(echo "$image" | cut -d'@' -f2)" 2>/dev/null || true
+    fi
+    
     return 0
   else
-    log_warning "SBOM attestation verification failed (may not be available for all images)"
-    return 0 # Don't fail the script if SBOM attestation is missing
+    log_warning "GitHub attestation verification failed (may not be available for all images)"
+    return 0 # Don't fail the script if GitHub attestations are not available
   fi
 }
 
@@ -330,8 +327,8 @@ main() {
   # Verify signature
   verify_signature "$image" "$is_pr_image" "$sig_file" || exit $?
 
-  # Verify SBOM attestation
-  verify_sbom_attestation "$image" "$is_pr_image" "$sbom_att_file" || exit $?
+  # Verify GitHub attestations (SLSA Level 3 compliant)
+  verify_github_attestations "$image" || exit $?
 
   # Download SBOM if requested
   if [[ "$download_sbom_flag" == "true" ]]; then
