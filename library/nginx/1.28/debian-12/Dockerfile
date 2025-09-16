@@ -138,10 +138,6 @@ RUN ln -sf /dev/stdout /var/log/nginx/access.log \
 # Expose standard HTTP port for non-root user (8080) and HTTPS (8443)
 EXPOSE 8080 8443
 
-# Add health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-    CMD nginx -t || exit 1
-
 STOPSIGNAL SIGQUIT
 
 USER ${NGINX_USER}
