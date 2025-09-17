@@ -40,7 +40,7 @@ concurrency:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAMESPACE: ${{ github.repository_owner }}
-  BUILD_PLATFORMS: linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v5,linux/386,linux/ppc64le,linux/s390x,linux/mips64le
+  BUILD_PLATFORMS: linux/amd64,linux/arm64
   COSIGN_EXPERIMENTAL: 1
 
 jobs:
@@ -207,9 +207,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
-
       - name: Log in to Container Registry
         uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0
         with:
@@ -284,9 +281,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
-
       - name: Log in to Container Registry
         uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0
         with:
@@ -325,7 +319,12 @@ jobs:
           enable_security_scan: "false"
           enable_attestations: "true"
 
-      # 4. Sign Container Image with Cosign
+      # 4. Install Cosign
+      - name: Install Cosign
+        if: steps.build-production.outcome == 'success'
+        uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # v3.10.0
+
+      # 5. Sign Container Image with Cosign
       - name: Sign container image with Cosign
         if: steps.build-production.outcome == 'success'
         env:
@@ -336,17 +335,20 @@ jobs:
           echo "🔏 Signing container image: ${image_ref}"
 
           # Sign the image with enhanced metadata
+          # Use space-separated platforms to avoid comma parsing issues
+          platforms_safe="${{ needs.generate-platform-matrix.outputs.production_platforms }}"
+          platforms_safe="${platforms_safe//,/ }"  # Replace commas with spaces
           cosign sign --yes "${image_ref}" \
             --annotations="org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
             --annotations="org.opencontainers.image.revision=${{ github.sha }}" \
             --annotations="org.opencontainers.image.workflow=${{ github.workflow }}" \
             --annotations="org.opencontainers.image.run-id=${{ github.run_id }}" \
             --annotations="build.broadsage.com/container=${{ matrix.container }}" \
-            --annotations="build.broadsage.com/platforms=${{ needs.generate-platform-matrix.outputs.production_platforms }}"
+            --annotations="build.broadsage.com/platforms=${platforms_safe}"
 
-                    echo "✅ Image signed successfully"
+          echo "✅ Image signed successfully"
 
-      # 5. Generate SBOM with Anchore Syft
+      # 6. Generate SBOM with Anchore Syft
       - name: Generate SBOM
         if: steps.build-production.outcome == 'success'
         uses: anchore/sbom-action@da167eac915b4e86f08b264dbdbc867b61be6f0c # v0.20.5
@@ -355,7 +357,7 @@ jobs:
           format: spdx-json
           output-file: sbom.spdx.json
 
-      # 6. Create GitHub SBOM Attestation
+      # 7. Create GitHub SBOM Attestation
       - name: Create GitHub SBOM Attestation
         if: steps.build-production.outcome == 'success'
         uses: actions/attest-sbom@5026d3663739160db546203eeaffa6aa1c51a4d6 # v1.4.1
@@ -365,7 +367,7 @@ jobs:
           sbom-path: sbom.spdx.json
           push-to-registry: true
 
-      # 7. Create GitHub Build Provenance Attestation (SLSA Level 3)
+      # 8. Create GitHub Build Provenance Attestation (SLSA Level 3)
       - name: Create GitHub Build Provenance Attestation
         if: steps.build-production.outcome == 'success'
         uses: actions/attest-build-provenance@1c608d11d69870c2092266b3f9a6f3abbf17002c # v1.4.3
@@ -374,7 +376,7 @@ jobs:
           subject-digest: ${{ steps.build-production.outputs.image_digest }}
           push-to-registry: true
 
-      # 8. Verify Attestations
+      # 9. Verify Attestations
 
       - name: Verify signed image with strict policy
         if: steps.build-production.outcome == 'success'
@@ -382,7 +384,7 @@ jobs:
           COSIGN_EXPERIMENTAL: 1
         run: |
           image_ref="${{ steps.build-metadata.outputs.image_name }}@${{ steps.build-production.outputs.image_digest }}"
-          expected_identity="https://github.com/${{ github.repository }}/.github/workflows/release-pipeline.yml@refs/heads/main"
+          expected_identity="https://github.com/${{ github.repository }}/.github/workflows/release-pipeline.yml@${{ github.ref }}"
           expected_issuer="https://token.actions.githubusercontent.com"
 
           echo "🔍 Verifying image signature with strict identity verification..."
