@@ -384,7 +384,7 @@ jobs:
           COSIGN_EXPERIMENTAL: 1
         run: |
           image_ref="${{ steps.build-metadata.outputs.image_name }}@${{ steps.build-production.outputs.image_digest }}"
-          expected_identity="https://github.com/${{ github.repository }}/.github/workflows/release-pipeline.yml@refs/heads/main"
+          expected_identity="https://github.com/${{ github.repository }}/.github/workflows/release-pipeline.yml@${{ github.ref }}"
           expected_issuer="https://token.actions.githubusercontent.com"
 
           echo "🔍 Verifying image signature with strict identity verification..."
