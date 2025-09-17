@@ -17,3 +17,8 @@ updates:
     directory: /broadsage/nginx/1.29/debian-12
     schedule:
       interval: daily
+
+  - package-ecosystem: docker
+    directory: /library/nginx/1.28/debian-12
+    schedule:
+      interval: daily
