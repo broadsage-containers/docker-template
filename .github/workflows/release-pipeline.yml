@@ -335,15 +335,16 @@ jobs:
           echo "🔏 Signing container image: ${image_ref}"
 
           # Sign the image with enhanced metadata
-          # Use single quotes to properly contain comma-separated platforms
-          platforms_annotation="${{ needs.generate-platform-matrix.outputs.production_platforms }}"
+          # Use space-separated platforms to avoid comma parsing issues
+          platforms_safe="${{ needs.generate-platform-matrix.outputs.production_platforms }}"
+          platforms_safe="${platforms_safe//,/ }"  # Replace commas with spaces
           cosign sign --yes "${image_ref}" \
             --annotations="org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
             --annotations="org.opencontainers.image.revision=${{ github.sha }}" \
             --annotations="org.opencontainers.image.workflow=${{ github.workflow }}" \
             --annotations="org.opencontainers.image.run-id=${{ github.run_id }}" \
             --annotations="build.broadsage.com/container=${{ matrix.container }}" \
-            --annotations='build.broadsage.com/platforms='"${platforms_annotation}"
+            --annotations="build.broadsage.com/platforms=${platforms_safe}"
 
           echo "✅ Image signed successfully"
 
