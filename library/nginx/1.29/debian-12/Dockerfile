@@ -9,7 +9,7 @@ ARG BUILDPLATFORM
 # Build stage
 FROM debian:bookworm-slim AS builder
 
-ARG NGINX_VERSION=1.28.0
+ARG NGINX_VERSION=1.29.0
 ARG TARGETARCH
 ARG NGINX_MODULES=""
 
@@ -38,7 +38,7 @@ RUN set -eux; \
         echo "Exact version ${NGINX_VERSION} not available, checking available versions..."; \
         apt-cache policy nginx; \
         if ! apt-get install -y --no-install-recommends nginx=${NGINX_VERSION}-1~bookworm 2>/dev/null; then \
-            apt-get install -y --no-install-recommends nginx=1.28.*; \
+            apt-get install -y --no-install-recommends nginx=1.29.*; \
         fi; \
     fi; \
     \
@@ -69,7 +69,7 @@ RUN set -eux; \
 # Runtime stage - minimal size
 FROM debian:bookworm-slim
 
-ARG NGINX_VERSION=1.28.0
+ARG NGINX_VERSION=1.29.0
 ARG NGINX_USER=nginx
 ARG NGINX_UID=101
 ARG NGINX_GID=101

@@ -1,0 +1,86 @@
+<!--
+SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage <opensource@broadsage.com>
+
+SPDX-License-Identifier: Apache-2.0
+-->
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Welcome to nginx!</title>
+    <style>
+        body {
+            width: 35em;
+            margin: 0 auto;
+            font-family: Tahoma, Verdana, Arial, sans-serif;
+            background-color: #f8f9fa;
+            color: #333;
+            line-height: 1.6;
+        }
+        .container {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin: 2rem auto;
+        }
+        h1 {
+            color: #0066cc;
+            text-align: center;
+            border-bottom: 2px solid #0066cc;
+            padding-bottom: 0.5rem;
+        }
+        .info {
+            background-color: #e7f3ff;
+            padding: 1rem;
+            border-left: 4px solid #0066cc;
+            margin: 1rem 0;
+        }
+        .footer {
+            text-align: center;
+            color: #666;
+            font-size: 0.9em;
+            margin-top: 2rem;
+        }
+        .version {
+            background-color: #f0f0f0;
+            padding: 0.5rem;
+            border-radius: 4px;
+            font-family: monospace;
+            text-align: center;
+            margin: 1rem 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Welcome to nginx!</h1>
+        
+        <div class="info">
+            <p><strong>Congratulations!</strong> If you're seeing this page, the nginx web server is successfully installed and working.</p>
+        </div>
+
+        <div class="version">
+            Broadsage Containers - Nginx 1.29.1
+        </div>
+
+        <p>This is the default welcome page for the Broadsage nginx container image. It is based on the official nginx upstream sources and configured with security best practices.</p>
+
+        <p><strong>For online documentation and support please refer to:</strong><br/>
+        <a href="http://nginx.org/">nginx.org</a><br/>
+        <a href="https://github.com/broadsage/containers">Broadsage Containers</a></p>
+
+        <div class="info">
+            <p><strong>Configuration files are located at:</strong><br/>
+            • Main config: <code>/etc/nginx/nginx.conf</code><br/>
+            • Site configs: <code>/etc/nginx/conf.d/*.conf</code><br/>
+            • Document root: <code>/usr/share/nginx/html</code>
+            </p>
+        </div>
+
+        <div class="footer">
+            <p>Thank you for using nginx with Broadsage Containers.</p>
+        </div>
+    </div>
+</body>
+</html>

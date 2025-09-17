@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage <opensource@broadsage.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+version: '3.8'
+
+services:
+  nginx:
+    build:
+      context: ./debian-12
+      dockerfile: Dockerfile
+      args:
+        NGINX_VERSION: "1.29.0"
+    container_name: broadsage-nginx-1.29
+    ports:
+      - "8080:8080"
+      - "8443:8443"
+    environment:
+      - NGINX_ENVSUBST_TEMPLATE_DIR=/etc/nginx/templates
+      - NGINX_ENVSUBST_OUTPUT_DIR=/etc/nginx/conf.d
+    volumes:
+      - ./debian-12/html:/usr/share/nginx/html:ro
+      - nginx_cache:/var/cache/nginx
+      - nginx_logs:/var/log/nginx
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  nginx_cache:
+  nginx_logs:
