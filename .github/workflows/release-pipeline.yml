@@ -335,6 +335,7 @@ jobs:
           echo "🔏 Signing container image: ${image_ref}"
 
           # Sign the image with enhanced metadata
+          # Properly quote the platforms annotation to handle commas
           platforms_annotation="${{ needs.generate-platform-matrix.outputs.production_platforms }}"
           cosign sign --yes "${image_ref}" \
             --annotations="org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
@@ -342,9 +343,9 @@ jobs:
             --annotations="org.opencontainers.image.workflow=${{ github.workflow }}" \
             --annotations="org.opencontainers.image.run-id=${{ github.run_id }}" \
             --annotations="build.broadsage.com/container=${{ matrix.container }}" \
-            --annotations="build.broadsage.com/platforms=${platforms_annotation}"
+            --annotations="build.broadsage.com/platforms=\"${platforms_annotation}\""
 
-                    echo "✅ Image signed successfully"
+          echo "✅ Image signed successfully"
 
       # 6. Generate SBOM with Anchore Syft
       - name: Generate SBOM
