@@ -1,4 +1,7 @@
-#SPDX-License-Identifier: MIT-0
+# SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage <opensource@broadsage.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 ---
 # tasks file for ansible/roles/repository
 
@@ -11,7 +14,7 @@
   ansible.builtin.file:
     path: "{{ path }}/{{ item }}"
     state: directory
-    mode: '0755'
+    mode: "0755"
   loop:
     - ".github/workflows"
     - ".github/actions/docker-build"
@@ -31,7 +34,7 @@
   ansible.builtin.template:
     src: "{{ item.src }}"
     dest: "{{ path }}/{{ item.dest }}"
-    mode: '0644'
+    mode: "0644"
   loop:
     - src: "README.md.j2"
       dest: "README.md"
@@ -40,7 +43,7 @@
   ansible.builtin.file:
     path: "{{ path }}/containers/{{ project.name }}/{{ item }}"
     state: directory
-    mode: '0755'
+    mode: "0755"
   loop:
     - "root/etc"
     - "root/app"
@@ -50,7 +53,7 @@
   ansible.builtin.template:
     src: "containers/Dockerfile.j2"
     dest: "{{ path }}/containers/{{ project.name }}/Dockerfile"
-    mode: '0644'
+    mode: "0644"
 
 - name: Display project creation summary
   ansible.builtin.shell: |
@@ -66,4 +69,3 @@
     echo ""
     echo "Happy coding! 🎉"
     echo ""
-

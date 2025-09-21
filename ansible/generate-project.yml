@@ -1,4 +1,7 @@
-#SPDX-License-Identifier: MIT-0
+# SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage <opensource@broadsage.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
 ---
 # Playbook for creating/managing Docker projects using the repository role
 # Usage: ansible-playbook generate-project.yml
@@ -10,22 +13,21 @@
   vars:
     # Project path - use workspace directory where build-vars.yml is mounted
     path: "/workspace"
-    
+
     # Maintainer information
     maintainer_name: "Your Name"
     maintainer_email: "your.email@domain.com"
     git_user_name: "Your Name"
     git_user_email: "your.email@domain.com"
-    
+
     # Optional: disable example container creation
     # create_example_container: false
-    
+
     # Optional: custom build platforms
     # build_platforms: "linux/amd64,linux/arm64,linux/arm/v7"
-    
+
   roles:
     - repository
-
 # Alternative usage with command-line variables:
 # ansible-playbook generate-project.yml \
 #   -e project="docker-redis" \

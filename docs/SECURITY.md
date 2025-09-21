@@ -12,7 +12,7 @@ This document provides comprehensive security information for Broadsage containe
 
 **Do not report security vulnerabilities through public GitHub issues.**
 
-Please report security vulnerabilities by emailing: **security@broadsage.com**
+Please report security vulnerabilities by emailing: **<security@broadsage.com>**
 
 Include the following information:
 
