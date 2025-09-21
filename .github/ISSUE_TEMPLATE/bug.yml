@@ -1,0 +1,91 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage <opensource@broadsage.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+---
+name: 🐛 Bug Report
+description: Report a bug or issue
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug! This helps us improve the project. 🙏
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Prerequisites
+      options:
+        - label: I have read the [Code of Conduct](../CODE_OF_CONDUCT.md)
+          required: true
+        - label: I have searched for existing issues
+          required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: What version are you using?
+      placeholder: "e.g., v1.0.0, latest, main branch"
+    validations:
+      required: true
+
+  - type: textarea
+    id: bug-description
+    attributes:
+      label: Bug Description
+      description: A clear description of what the bug is
+      placeholder: "Describe what happened..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected Behavior
+      description: What should have happened?
+      placeholder: "Describe what you expected..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps-to-reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce this issue?
+      placeholder: |
+        1. Step 1
+        2. Step 2
+        3. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Your system environment
+      placeholder: |
+        - OS: [e.g., Ubuntu 22.04, macOS 14.0]
+        - Docker/Podman version:
+        - Container runtime:
+        - Architecture: [e.g., amd64, arm64]
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and Output
+      description: Relevant logs, error messages, or output
+      render: shell
+      placeholder: "Paste relevant logs here..."
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Any additional information that might help
+      placeholder: "Screenshots, related issues, workarounds, etc."

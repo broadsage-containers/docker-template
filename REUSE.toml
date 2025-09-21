@@ -1,12 +1,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage <opensource@broadsage.com>
-#
 # SPDX-License-Identifier: Apache-2.0
 
 version = 1
 
 # configurations
 [[annotations]]
-path = [".github/PULL_REQUEST_TEMPLATE.md",".commitlintrc.json",".markdownlint.json",".github/auto-label-config.json"]
+path = [".github/PULL_REQUEST_TEMPLATE.md",".commitlintrc.json",".markdownlint.json"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "Copyright (c) 2025 Broadsage <opensource@broadsage.com>"
 SPDX-License-Identifier = "Apache-2.0"

@@ -1,0 +1,49 @@
+#SPDX-License-Identifier: MIT-0
+---
+# defaults file for ansible/roles/repository
+
+# Template variables files to process
+template_vars:
+  - "project.yml"
+
+# Core project configuration
+project: "docker-template"
+path: "./"
+organization: "broadsage-containers"
+description: "Docker container project"
+
+# Computed URLs and paths
+project_url: "https://github.com/{{ organization }}/{{ project }}"
+support_url: "{{ project_url }}/discussions"
+
+# Build configuration
+registry_url: "ghcr.io"
+image_namespace: "broadsage"
+build_platforms: "linux/amd64,linux/arm64"
+
+# Development tools
+install_precommit: true
+enable_dependabot: true
+
+# License and compliance
+license_type: "Apache-2.0"
+copyright_holder: "Broadsage Corporation <opensource@broadsage.com>"
+copyright_year: "2025"
+
+# Maintainer information
+maintainer_name: "Broadsage Corporation"
+maintainer_email: "containers@broadsage.com"
+
+# Security configuration
+enable_security_scanning: true
+enable_cosign_signing: true
+enable_slsa_attestations: true
+
+# CI/CD configuration
+enable_pr_validation: true
+enable_auto_merge: false
+enable_stale_management: true
+
+# Template configuration
+template_version: "v1.0.0"
+template_date: "2025-09-19"

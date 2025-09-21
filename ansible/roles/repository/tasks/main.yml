@@ -1,0 +1,69 @@
+#SPDX-License-Identifier: MIT-0
+---
+# tasks file for ansible/roles/repository
+
+- name: Load template variables from project directory
+  ansible.builtin.include_vars:
+    file: "/workspace/{{ item }}"
+  loop: "{{ template_vars }}"
+
+- name: Create project directory structure
+  ansible.builtin.file:
+    path: "{{ path }}/{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - ".github/workflows"
+    - ".github/actions/docker-build"
+    - ".github/actions/discover-containers"
+    - ".github/actions/build-metadata"
+    - ".github/ISSUE_TEMPLATE"
+    - ".github/DISCUSSION_TEMPLATE"
+    - ".github/PULL_REQUEST_TEMPLATE"
+    - "config/cosign"
+    - "config/linting"
+    - "docs/architecture"
+    - "scripts"
+    - "LICENSES"
+    - "containers"
+
+- name: Generate core project files
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ path }}/{{ item.dest }}"
+    mode: '0644'
+  loop:
+    - src: "README.md.j2"
+      dest: "README.md"
+
+- name: Create example container structure
+  ansible.builtin.file:
+    path: "{{ path }}/containers/{{ project.name }}/{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - "root/etc"
+    - "root/app"
+    - "root/defaults"
+
+- name: Generate example Dockerfile
+  ansible.builtin.template:
+    src: "containers/Dockerfile.j2"
+    dest: "{{ path }}/containers/{{ project.name }}/Dockerfile"
+    mode: '0644'
+
+- name: Display project creation summary
+  ansible.builtin.shell: |
+    echo ""
+    echo "✅ Project \"{{ project.name }}\" created!"
+    echo ""
+    echo "📁 Location: {{ path }}"
+    echo ""
+    echo "🚀 Next steps:"
+    echo "   1. Review generated files"
+    echo "   2. Add your code to containers/{{ project.name }}/"
+    echo "   3. Build: make build-{{ project.name }}"
+    echo ""
+    echo "Happy coding! 🎉"
+    echo ""
+
