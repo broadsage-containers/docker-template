@@ -3,66 +3,32 @@
 # SPDX-License-Identifier: {{ github_license }}
 
 ---
-name: {{ github_workflows.commit.name }}
-
+name: {{ github_workflows.commit.name | default("Conform DCO (--Sign-off)") }}
 on:
-  push:
-    branches: [{{ github_default_branch }}]
   pull_request:
     branches: [{{ github_default_branch }}]
-  workflow_dispatch:
 
 permissions:
   contents: read
-  pull-requests: read
-  security-events: write
-  statuses: write
 
 jobs:
-  commit-validation:
-    name: Validate Commits
+  signoff:
     runs-on: ubuntu-latest
-    
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - name: Harden GitHub runner
+        uses: step-security/harden-runner@f4a75cfd619ee5ce8d5b864b0d183aff3c69b55a #v2.13.1
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           fetch-depth: 0
-          token: ${{ "{{" }} secrets.GITHUB_TOKEN {{ "}}" }}
-      
-      - name: Validate Commit Messages
-        uses: wagoid/commitlint-github-action@v6
-        with:
-          configFile: '.conform.yaml'
-          
-      - name: Validate DCO
-        uses: dcoapp/dco-check@v1
+          ref: ${{ "{{" }} github.event.pull_request.head.sha {{ "}}" }}
+
+      - name: Setup main branch without switching current branch
+        run: git fetch origin {{ github_default_branch }}:{{ github_default_branch }}
+
+      - name: Conform Action
+        uses: siderolabs/conform@a316d3d13e82ac5f8d2eae42a734f8a885cddb15 # v0.1.0-alpha.29
         with:
           token: ${{ "{{" }} secrets.GITHUB_TOKEN {{ "}}" }}
-          
-  compliance-check:
-    name: Code Quality & Compliance
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-        with:
-          token: ${{ "{{" }} secrets.GITHUB_TOKEN {{ "}}" }}
-          
-      - name: MegaLinter
-        id: ml
-        uses: oxsecurity/megalinter/flavors/cupcake@v7
-        env:
-          DEFAULT_BRANCH: {{ github_default_branch }}
-          GITHUB_TOKEN: ${{ "{{" }} secrets.GITHUB_TOKEN {{ "}}" }}
-          VALIDATE_ALL_CODEBASE: true
-          
-      - name: Archive production artifacts
-        if: ${{ "{{" }} always() {{ "}}" }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: MegaLinter reports
-          path: |
-            megalinter-reports
-            mega-linter.log

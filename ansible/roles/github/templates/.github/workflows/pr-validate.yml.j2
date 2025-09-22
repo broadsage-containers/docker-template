@@ -1,0 +1,208 @@
+# SPDX-FileCopyrightText: Copyright (c) {{ github_copyright_year {{ "}}" }} {{ github_copyright_holder {{ "}}" }}
+#
+# SPDX-License-Identifier: {{ github_license {{ "}}" }}
+
+---
+name: "[PR] Pull Request Validation"
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [{{ github_default_branch {{ "}}" }}]
+
+# Use restrictive default permissions
+permissions:
+  contents: read
+
+# Prevent concurrent builds for the same PR
+concurrency:
+  group: ${{ "{{" {{ "}}" }} github.workflow {{ "}}" }}-${{ "{{" {{ "}}" }} github.event.pull_request.number {{ "}}" }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAMESPACE: ${{ "{{" {{ "}}" }} github.repository_owner {{ "}}" }}
+  BUILD_PLATFORMS: linux/amd64
+
+jobs:
+  # Matrix generation job to discover containers to build
+  discover-containers:
+    runs-on: ubuntu-latest
+    name: Discover Modified Containers
+    # Job-level permissions for discovery
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ "{{" {{ "}}" }} steps.discover.outputs.matrix {{ "}}" }}
+      has_changes: ${{ "{{" {{ "}}" }} steps.discover.outputs.has_changes {{ "}}" }}
+      container_count: ${{ "{{" {{ "}}" }} steps.discover.outputs.container_count {{ "}}" }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@f4a75cfd619ee5ce8d5b864b0d183aff3c69b55a # v2.13.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout Repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Get changed files
+        id: changed-files
+        uses: step-security/changed-files@95b56dadb92a30ca9036f16423fd3c088a71ee94 # v46.0.5
+        with:
+          files: |
+            library/**
+          files_ignore: |
+            **/*.md
+            **/*.txt
+            **/LICENSE
+            .github/**
+
+      - name: Discover containers using composite action
+        id: discover
+        uses: ./.github/actions/discover-containers
+        with:
+          event_type: ${{ "{{" {{ "}}" }} github.event_name {{ "}}" }}
+          changed_files: ${{ "{{" {{ "}}" }} steps.changed-files.outputs.all_changed_files {{ "}}" }}
+          containers_filter: ""
+          force_all: "false"
+          include_dev_versions: "true"
+          base_ref: ${{ "{{" {{ "}}" }} github.event.pull_request.base.ref || 'main' {{ "}}" }}
+
+  # Lint and validate Dockerfiles
+  lint-dockerfiles:
+    runs-on: ubuntu-latest
+    name: Lint Dockerfiles
+    # Job-level permissions for linting
+    permissions:
+      contents: read
+      security-events: write # For SARIF upload
+    needs: discover-containers
+    if: needs.discover-containers.outputs.has_changes == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ "{{" {{ "}}" }} fromJSON(needs.discover-containers.outputs.matrix) {{ "}}" }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@f4a75cfd619ee5ce8d5b864b0d183aff3c69b55a # v2.13.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout Repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Lint Dockerfile with Hadolint
+        uses: hadolint/hadolint-action@3fc49fb50d59c6ab7917a2e4195dba633e515b29 # v3.2.0
+        with:
+          dockerfile: ${{ "{{" {{ "}}" }} matrix.container {{ "}}" }}/Dockerfile
+          format: sarif
+          output-file: hadolint-results.sarif
+          no-fail: true
+
+      - name: Upload Hadolint results
+        uses: github/codeql-action/upload-sarif@192325c86100d080feab897ff886c34abd4c83a3 # v3.30.3
+        if: always()
+        with:
+          sarif_file: hadolint-results.sarif
+          category: hadolint
+
+  # Build and test container images (without pushing)
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60 # Standard timeout for single-platform builds
+    name: Build & Test (Unprivileged)
+    # Job-level permissions for build and test without publishing
+    permissions:
+      contents: read
+      security-events: write # For security scan results
+    needs: [discover-containers, lint-dockerfiles]
+    if: needs.discover-containers.outputs.has_changes == 'true'
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        include: ${{ "{{" {{ "}}" }} fromJSON(needs.discover-containers.outputs.matrix) {{ "}}" }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@f4a75cfd619ee5ce8d5b864b0d183aff3c69b55a # v2.13.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout Repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
+
+      - name: Generate build metadata
+        id: build-metadata
+        uses: ./.github/actions/build-metadata
+        with:
+          container_path: ${{ "{{" {{ "}}" }} matrix.container {{ "}}" }}
+          app_name: ${{ "{{" {{ "}}" }} matrix.app {{ "}}" }}
+          version: ${{ "{{" {{ "}}" }} matrix.version {{ "}}" }}
+          platform: ${{ "{{" {{ "}}" }} matrix.platform {{ "}}" }}
+          registry: ${{ "{{" {{ "}}" }} env.REGISTRY {{ "}}" }}
+          image_namespace: ${{ "{{" {{ "}}" }} env.IMAGE_NAMESPACE {{ "}}" }}
+          event_name: ${{ "{{" {{ "}}" }} github.event_name {{ "}}" }}
+          ref: ${{ "{{" {{ "}}" }} github.ref {{ "}}" }}
+          sha: ${{ "{{" {{ "}}" }} github.sha {{ "}}" }}
+          is_production: "false"
+
+      - name: Build and test container
+        id: build-test
+        uses: ./.github/actions/docker-build
+        with:
+          container_path: ${{ "{{" {{ "}}" }} matrix.container {{ "}}" }}
+          image_tags: ${{ "{{" {{ "}}" }} steps.build-metadata.outputs.tags {{ "}}" }}
+          image_labels: ${{ "{{" {{ "}}" }} steps.build-metadata.outputs.labels {{ "}}" }}
+          build_platforms: linux/amd64 # Only build for amd64 in PR checks for speed
+          push_image: "false"
+          load_image: "true"
+          cache_scope: build-${{ "{{" {{ "}}" }} matrix.app {{ "}}" }}-${{ "{{" {{ "}}" }} matrix.version {{ "}}" }}-${{ "{{" {{ "}}" }} matrix.platform {{ "}}" }}
+          enable_security_scan: "true"
+          enable_attestations: "false"
+          trivy_category: trivy-pr-${{ "{{" {{ "}}" }} matrix.container {{ "}}" }}
+          test_image_tag: ${{ "{{" {{ "}}" }} steps.build-metadata.outputs.primary_tag {{ "}}" }}
+
+  # Summary job
+  pr-check-summary:
+    runs-on: ubuntu-latest
+    name: PR Check Summary
+    # Job-level permissions for status reporting
+    permissions:
+      contents: read
+    needs: [discover-containers, lint-dockerfiles, build-and-test]
+    if: always()
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@f4a75cfd619ee5ce8d5b864b0d183aff3c69b55a # v2.13.1
+        with:
+          egress-policy: audit
+
+      - name: Check results
+        run: |
+          if [[ "${{ "{{" {{ "}}" }} needs.discover-containers.result {{ "}}" }}" == "success" ]]; then
+            if [[ "${{ "{{" {{ "}}" }} needs.discover-containers.outputs.has_changes {{ "}}" }}" == "true" ]]; then
+              echo "✅ Container discovery completed - found changes"
+              if [[ "${{ "{{" {{ "}}" }} needs.lint-dockerfiles.result {{ "}}" }}" == "success" && "${{ "{{" {{ "}}" }} needs.build-and-test.result {{ "}}" }}" == "success" ]]; then
+                echo "✅ All checks passed! PR is ready for review."
+                echo "::notice::All container builds and tests completed successfully"
+              else
+                echo "❌ Some checks failed. Please review the errors above."
+                exit 1
+              fi
+            else
+              echo "✅ No container changes detected - skipping builds"
+            fi
+          else
+            echo "❌ Container discovery failed"
+            exit 1
+          fi

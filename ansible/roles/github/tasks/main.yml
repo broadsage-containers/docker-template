@@ -20,22 +20,36 @@
 
 - name: "Deploy GitHub workflows"
   ansible.builtin.template:
-    src: ".github/workflows/{{ item.key }}.yml.j2"
-    dest: "{{ github_project_path }}/.github/workflows/{{ item.key }}.yml"
+    src: ".github/workflows/{{ item }}.yml.j2"
+    dest: "{{ github_project_path }}/.github/workflows/{{ item }}.yml"
     mode: '0644'
-  loop: "{{ github_workflows | dict2items }}"
-  when: item.value.enabled | default(false)
+  loop:
+    - "commit"
+    - "dependabot-auto-merge"
+    - "dependency-review"
+    - "mega-linter"
+    - "label-management"
+    - "license"
+    - "pr-publish" 
+    - "pr-validate"
+    - "scorecard-analysis"
+    - "stale"
+  when: github_workflows[item.replace('-', '_')] is defined and github_workflows[item.replace('-', '_')].enabled | default(true)
   tags:
     - github
     - workflows
 
 - name: "Deploy GitHub issue templates"
   ansible.builtin.template:
-    src: ".github/ISSUE_TEMPLATE/{{ item.name }}.yml.j2"
-    dest: "{{ github_project_path }}/.github/ISSUE_TEMPLATE/{{ item.name }}.yml"
+    src: ".github/ISSUE_TEMPLATE/{{ item }}.yml.j2"
+    dest: "{{ github_project_path }}/.github/ISSUE_TEMPLATE/{{ item }}.yml"
     mode: '0644'
-  loop: "{{ github_issue_templates }}"
-  when: item.enabled | default(false)
+  loop:
+    - "bug"
+    - "config"
+    - "feature"
+    - "question"
+  when: github_issue_templates[item] is defined and github_issue_templates[item].enabled | default(true)
   tags:
     - github
     - issue-templates

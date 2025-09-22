@@ -1,0 +1,501 @@
+# SPDX-FileCopyrightText: Copyright (c) {{ github_copyright_year {{ "}}" }} {{ github_copyright_holder {{ "}}" }}
+#
+# SPDX-License-Identifier: {{ github_license {{ "}}" }}
+
+---
+name: "[Support] Label Management and Auto-Triage"
+
+on:
+  issues:
+    types: [opened, edited, labeled, unlabeled]
+  pull_request:
+    types: [opened, edited, labeled, unlabeled, ready_for_review]
+  schedule:
+    # Run triage check every 6 hours
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      action_type:
+        description: "Type of action to perform"
+        required: false
+        default: "auto-triage"
+        type: choice
+        options:
+          - "setup-labels"
+          - "auto-triage"
+          - "validate-config"
+          - "all"
+      issue_number:
+        description: "Specific issue number to triage (optional)"
+        required: false
+        type: string
+
+# Use restrictive default permissions
+permissions:
+  contents: read
+
+jobs:
+  # Setup repository labels based on configuration
+  setup-labels:
+    runs-on: ubuntu-latest
+    name: Setup Repository Labels
+    if: |
+      github.event_name == 'workflow_dispatch' && 
+      (github.event.inputs.action_type == 'setup-labels' || 
+       github.event.inputs.action_type == 'all')
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@f4a75cfd619ee5ce8d5b864b0d183aff3c69b55a # v2.13.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Setup labels from configuration
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          github-token: ${{ "{{" {{ "}}" }} secrets.AUTOBOT_GITHUB_TOKEN || secrets.GITHUB_TOKEN {{ "}}" }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            // Load auto-label configuration
+            const configPath = path.join(process.env.GITHUB_WORKSPACE, '.github', 'auto-label-config.json');
+            let config;
+
+            try {
+              const configContent = fs.readFileSync(configPath, 'utf8');
+              config = JSON.parse(configContent);
+              console.log('📄 Loaded auto-label configuration');
+              console.log(`📊 Config version: ${config._version || 'unknown'}`);
+            } catch (error) {
+              console.log(`❌ Error loading config file: ${error.message}`);
+              core.setFailed('Could not load auto-label configuration');
+              return;
+            }
+
+            if (!config.label_definitions) {
+              console.log('❌ No label definitions found in configuration');
+              core.setFailed('Configuration missing label_definitions section');
+              return;
+            }
+
+            const labels = Object.entries(config.label_definitions).map(([name, def]) => ({
+              name,
+              color: def.color,
+              description: def.description
+            }));
+
+            console.log(`🏷️ Setting up ${labels.length} labels from configuration...`);
+
+            let created = 0, updated = 0, errors = 0;
+
+            for (const label of labels) {
+              try {
+                await github.rest.issues.createLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: label.name,
+                  color: label.color,
+                  description: label.description
+                });
+                console.log(`✅ Created label: "${label.name}"`);
+                created++;
+              } catch (error) {
+                if (error.status === 422) {
+                  // Label already exists, try to update it
+                  try {
+                    await github.rest.issues.updateLabel({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      name: label.name,
+                      color: label.color,
+                      description: label.description
+                    });
+                    console.log(`🔄 Updated label: "${label.name}"`);
+                    updated++;
+                  } catch (updateError) {
+                    console.log(`⚠️ Could not update label "${label.name}": ${updateError.message}`);
+                    errors++;
+                  }
+                } else {
+                  console.log(`❌ Error with label "${label.name}": ${error.message}`);
+                  errors++;
+                }
+              }
+            }
+
+            console.log(`\n📊 Label setup summary:`);
+            console.log(`✅ Created: ${created}`);
+            console.log(`🔄 Updated: ${updated}`);
+            console.log(`❌ Errors: ${errors}`);
+            console.log(`📋 Total processed: ${labels.length}`);
+
+  # Validate configuration
+  validate-config:
+    runs-on: ubuntu-latest
+    name: Validate Configuration
+    if: |
+      github.event_name == 'workflow_dispatch' && 
+      (github.event.inputs.action_type == 'validate-config' || 
+       github.event.inputs.action_type == 'all')
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@f4a75cfd619ee5ce8d5b864b0d183aff3c69b55a # v2.13.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Validate configuration
+        run: |
+          if [ -f "scripts/validate-auto-label-config.js" ]; then
+            node scripts/validate-auto-label-config.js
+          else
+            echo "⚠️ Validation script not found"
+          fi
+
+  # PR Title Validation for Conventional Commits
+  validate-pr-title:
+    runs-on: ubuntu-latest
+    name: Validate PR Title Format
+    if: |
+      github.event.pull_request &&
+      (github.event.action == 'opened' || github.event.action == 'edited') &&
+      github.actor != 'dependabot[bot]' &&
+      github.actor != 'github-actions[bot]' &&
+      (github.event_name != 'workflow_dispatch' || 
+       github.event.inputs.action_type == 'auto-triage' || 
+       github.event.inputs.action_type == 'all')
+    permissions:
+      contents: read
+      pull-requests: write
+      checks: write
+      statuses: write
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@f4a75cfd619ee5ce8d5b864b0d183aff3c69b55a # v2.13.1
+        with:
+          egress-policy: audit
+
+      - name: Validate PR Title Convention
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          github-token: ${{ "{{" {{ "}}" }} secrets.AUTOBOT_GITHUB_TOKEN || secrets.GITHUB_TOKEN {{ "}}" }}
+          script: |
+            const title = context.payload.pull_request.title.trim().replace(/\s+/g, ' ');
+            const conventionalCommitPattern = /^(feat|fix|docs|style|refactor|perf|test|chore|ci|build|revert)(\(.+\))?!?:\s.+/;
+            const isValid = conventionalCommitPattern.test(title);
+
+            console.log(`🔍 Validating PR title: "${title}"`);
+            console.log(`📝 Original PR title: "${context.payload.pull_request.title}"`);
+            console.log(`✅ Valid format: ${isValid}`);
+
+            if (!isValid) {
+              const commentBody = `## ❌ PR Title Format Issue
+
+            Hello! 👋 Your PR title doesn't follow our conventional commit format.
+
+            ### 📋 Required Format:
+            \`<type>[optional scope]: <description>\`
+
+            ### 🎯 Valid Types:
+            - \`feat\`: New features
+            - \`fix\`: Bug fixes  
+            - \`docs\`: Documentation changes
+            - \`style\`: Code style changes (formatting, etc.)
+            - \`refactor\`: Code refactoring
+            - \`perf\`: Performance improvements
+            - \`test\`: Test changes
+            - \`chore\`: Maintenance tasks
+            - \`ci\`: CI/CD changes
+            - \`build\`: Build system changes
+            - \`revert\`: Revert changes
+
+            ### 🎯 Common Scopes (optional):
+            - \`api\`: API changes, endpoints
+            - \`auth\`: Authentication, authorization
+            - \`build\`: Build system, compilation
+            - \`ci\`: CI/CD workflows
+            - \`config\`: Configuration files
+            - \`container\`: Container-related changes
+            - \`deps\`: Dependencies, packages
+            - \`docker\`: Docker-specific changes
+            - \`docs\`: Documentation
+            - \`nginx\`: Nginx-specific changes
+            - \`scripts\`: Build/automation scripts
+            - \`security\`: Security-related changes
+            - \`test\`: Testing code
+            - \`workflow\`: GitHub Actions workflows
+
+            ### 📝 Examples:
+            - \`feat: add nginx 1.29 support\`
+            - \`fix(docker): resolve build issue\`  
+            - \`feat(api): add container registry endpoint\`
+            - \`chore(deps): bump nginx to 1.29.1\`
+            - \`fix(security): patch CVE-2024-1234\`
+            - \`feat(auth)!: breaking authentication changes\`
+
+            ### 🔧 Please update your PR title to match this format.
+
+            **Original title:** \`${context.payload.pull_request.title}\`
+            **Processed title:** \`${title}\`
+
+            *Note: Whitespace and newlines are normalized for validation. This helps us automatically apply the correct labels and maintain a clean commit history!* ✨`;
+
+              // Add a comment explaining the requirements
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body: commentBody
+              });
+
+              // Set status check to failed
+              await github.rest.repos.createCommitStatus({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                sha: context.payload.pull_request.head.sha,
+                state: 'failure',
+                context: 'pr-title-validation',
+                description: 'PR title must follow conventional commit format'
+              });
+              
+              core.setFailed('PR title does not follow conventional commit format');
+            } else {
+              // Set status check to success
+              await github.rest.repos.createCommitStatus({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                sha: context.payload.pull_request.head.sha,
+                state: 'success',
+                context: 'pr-title-validation',
+                description: 'PR title follows conventional commit format ✅'
+              });
+              
+              console.log('✅ PR title validation passed');
+            }
+
+  # Auto-labeling for new issues and PRs
+  auto-triage:
+    runs-on: ubuntu-latest
+    name: Auto-label issues and PRs
+    if: |
+      (github.event.action == 'opened') &&
+      (github.event_name != 'workflow_dispatch' || 
+       github.event.inputs.action_type == 'auto-triage' || 
+       github.event.inputs.action_type == 'all') &&
+      github.actor != 'dependabot[bot]' &&
+      github.actor != 'github-actions[bot]'
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@f4a75cfd619ee5ce8d5b864b0d183aff3c69b55a # v2.13.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Auto-label based on configuration
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        continue-on-error: true
+        with:
+          github-token: ${{ "{{" {{ "}}" }} secrets.AUTOBOT_GITHUB_TOKEN || secrets.GITHUB_TOKEN {{ "}}" }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            // Load auto-label configuration
+            const configPath = path.join(process.env.GITHUB_WORKSPACE, '.github', 'auto-label-config.json');
+            let config;
+
+            try {
+              const configContent = fs.readFileSync(configPath, 'utf8');
+              config = JSON.parse(configContent);
+              console.log('📄 Loaded auto-label configuration from auto-label-config.json');
+              console.log(`📊 Config version: ${config._version || 'unknown'}`);
+            } catch (error) {
+              console.log(`❌ Error loading config file: ${error.message}`);
+              console.log('🔄 Falling back to basic conventional commits logic');
+              
+              // Fallback to basic conventional commits logic
+              config = {
+                enabled: true,
+                max_labels: 3,
+                conventional_commits: {
+                  'feat': { label: 'type: feature', priority: 1 },
+                  'fix': { label: 'type: fix', priority: 1 },
+                  'docs': { label: 'type: docs', priority: 2 },
+                  'chore': { label: 'type: chore', priority: 3 }
+                },
+                breaking_changes: {
+                  label: 'breaking-change',
+                  patterns: ['!:', 'BREAKING CHANGE:', 'BREAKING-CHANGE:'],
+                  priority: 1
+                },
+                scopes: {
+                  'docker': { label: 'scope: docker', priority: 2 },
+                  'container': { label: 'scope: container', priority: 2 },
+                  'security': { label: 'scope: security', priority: 1 }
+                }
+              };
+            }
+
+            // Check if auto-labeling is enabled
+            if (!config.enabled) {
+              console.log('⏸️ Auto-labeling is disabled in configuration');
+              return;
+            }
+
+            const issue = context.payload.issue || context.payload.pull_request;
+            const isIssue = !!context.payload.issue;
+            const title = issue.title;
+            const body = issue.body || '';
+            const labels = [];
+            const maxLabels = config.max_labels || 3;
+
+            console.log(`🔍 Analyzing ${isIssue ? 'issue' : 'PR'}: "${title}"`);
+
+            // Enhanced conventional commit detection for PRs
+            if (!isIssue) {
+              const conventionalCommitPattern = /^(feat|fix|docs|style|refactor|perf|test|chore|ci|build|revert)(\(([^)]+)\))?(!)?:\s*(.+)/;
+              const match = title.match(conventionalCommitPattern);
+              
+              if (match) {
+                const [, commitType, , scope, breakingChange, description] = match;
+                
+                console.log(`✅ Detected conventional commit - Type: "${commitType}"${scope ? `, Scope: "${scope}"` : ''}${breakingChange ? ', Breaking: true' : ''}`);
+                
+                // Apply type label using new configuration format
+                if (config.conventional_commits && config.conventional_commits[commitType]) {
+                  const typeConfig = config.conventional_commits[commitType];
+                  labels.push(typeConfig.label);
+                  console.log(`🏷️ Applied type label: "${typeConfig.label}"`);
+                }
+                
+                // Apply scope label if scope is present
+                if (scope && config.scopes && config.scopes[scope.toLowerCase()]) {
+                  const scopeConfig = config.scopes[scope.toLowerCase()];
+                  labels.push(scopeConfig.label);
+                  console.log(`🎯 Applied scope label: "${scopeConfig.label}" for scope "${scope}"`);
+                }
+                
+                // Check for breaking changes
+                if (breakingChange || 
+                    config.breaking_changes?.patterns?.some(pattern => 
+                      title.includes(pattern) || body.includes(pattern))) {
+                  if (config.breaking_changes?.label) {
+                    labels.push(config.breaking_changes.label);
+                    console.log(`⚠️ Applied breaking change label: "${config.breaking_changes.label}"`);
+                  }
+                }
+              } else {
+                console.log('⚠️ PR title does not follow conventional commit format');
+                console.log('💡 Expected format: type(scope): description or type: description');
+              }
+            } else {
+              // For issues, use basic content analysis
+              console.log('📝 Issue detected - applying basic content analysis');
+              
+              const titleLower = title.toLowerCase();
+              const bodyLower = body.toLowerCase();
+              
+              // Basic keyword detection for issues
+              if (titleLower.includes('bug') || titleLower.includes('fix') || titleLower.includes('error')) {
+                if (config.conventional_commits?.fix) {
+                  labels.push(config.conventional_commits.fix.label);
+                  console.log('🐛 Applied fix label for issue containing bug-related keywords');
+                }
+              } else if (titleLower.includes('feature') || titleLower.includes('enhancement')) {
+                if (config.conventional_commits?.feat) {
+                  labels.push(config.conventional_commits.feat.label);
+                  console.log('✨ Applied feature label for issue containing feature-related keywords');
+                }
+              } else if (titleLower.includes('documentation') || titleLower.includes('docs')) {
+                if (config.conventional_commits?.docs) {
+                  labels.push(config.conventional_commits.docs.label);
+                  console.log('📚 Applied docs label for issue containing documentation-related keywords');
+                }
+              }
+              
+              // Check for security-related content
+              if (titleLower.includes('security') || titleLower.includes('vulnerability') || 
+                  bodyLower.includes('security') || bodyLower.includes('cve')) {
+                if (config.scopes?.security) {
+                  labels.push(config.scopes.security.label);
+                  console.log('🔒 Applied security scope label');
+                }
+              }
+            }
+
+            // Remove duplicates and sort by priority
+            const uniqueLabels = [...new Set(labels)];
+
+            // Sort labels by priority if we have the config structure
+            const sortedLabels = uniqueLabels.sort((a, b) => {
+              let priorityA = 999, priorityB = 999;
+              
+              // Find priority from config
+              for (const [type, typeConfig] of Object.entries(config.conventional_commits || {})) {
+                if (typeConfig.label === a) priorityA = typeConfig.priority || 999;
+                if (typeConfig.label === b) priorityB = typeConfig.priority || 999;
+              }
+              for (const [scope, scopeConfig] of Object.entries(config.scopes || {})) {
+                if (scopeConfig.label === a) priorityA = scopeConfig.priority || 999;
+                if (scopeConfig.label === b) priorityB = scopeConfig.priority || 999;
+              }
+              if (config.breaking_changes?.label === a) priorityA = config.breaking_changes.priority || 1;
+              if (config.breaking_changes?.label === b) priorityB = config.breaking_changes.priority || 1;
+              
+              return priorityA - priorityB;
+            });
+
+            const finalLabels = sortedLabels.slice(0, maxLabels);
+
+            console.log(`📋 Final labels to apply: [${finalLabels.join(', ')}]`);
+
+            if (uniqueLabels.length > maxLabels) {
+              console.log(`⚠️ Truncated ${uniqueLabels.length - maxLabels} labels due to safety limit (max: ${maxLabels})`);
+            }
+
+            // Apply labels to the issue/PR
+            if (finalLabels.length > 0) {
+              try {
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  labels: finalLabels
+                });
+                console.log(`✅ Successfully applied ${finalLabels.length} labels: [${finalLabels.join(', ')}]`);
+              } catch (error) {
+                console.log(`❌ Error applying labels: ${error.message}`);
+                console.log('🔍 Some labels might not exist in the repository yet');
+                
+                // Try to apply labels one by one to see which ones fail
+                for (const label of finalLabels) {
+                  try {
+                    await github.rest.issues.addLabels({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      issue_number: issue.number,
+                      labels: [label]
+                    });
+                    console.log(`✅ Applied label: "${label}"`);
+                  } catch (singleError) {
+                    console.log(`❌ Failed to apply label "${label}": ${singleError.message}`);
+                  }
+                }
+              }
+            } else {
+              console.log('ℹ️ No labels to apply based on configuration rules');
+            }

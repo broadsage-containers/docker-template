@@ -1,0 +1,258 @@
+{
+  "_comment": "Simplified auto-labeling configuration based on Conventional Commits",
+  "_description": "Clean labeling system using only conventional commit patterns",
+  "_version": "3.1",
+
+  "enabled": true,
+  "max_labels": 3,
+
+  "label_definitions": {
+    "type: feature": {
+      "color": "00d4aa",
+      "description": "New features and enhancements"
+    },
+    "type: fix": {
+      "color": "ff6b6b",
+      "description": "Bug fixes and corrections"
+    },
+    "type: docs": {
+      "color": "0075ca",
+      "description": "Documentation changes"
+    },
+    "type: style": {
+      "color": "95a5a6",
+      "description": "Code style and formatting changes"
+    },
+    "type: refactor": {
+      "color": "9b59b6",
+      "description": "Code refactoring without functional changes"
+    },
+    "type: performance": {
+      "color": "e67e22",
+      "description": "Performance improvements"
+    },
+    "type: test": {
+      "color": "3498db",
+      "description": "Test additions and modifications"
+    },
+    "type: chore": {
+      "color": "7f8c8d",
+      "description": "Maintenance and housekeeping tasks"
+    },
+    "type: ci": {
+      "color": "6c5ce7",
+      "description": "CI/CD pipeline changes"
+    },
+    "type: build": {
+      "color": "fd79a8",
+      "description": "Build system changes"
+    },
+    "type: revert": {
+      "color": "e84393",
+      "description": "Revert previous changes"
+    },
+    "breaking-change": {
+      "color": "b60205",
+      "description": "Breaking changes that require major version bump"
+    },
+    "scope: api": {
+      "color": "00cec9",
+      "description": "API endpoints and interfaces"
+    },
+    "scope: auth": {
+      "color": "e17055",
+      "description": "Authentication and authorization"
+    },
+    "scope: build": {
+      "color": "a29bfe",
+      "description": "Build system and compilation"
+    },
+    "scope: ci": {
+      "color": "6c5ce7",
+      "description": "Continuous integration workflows"
+    },
+    "scope: config": {
+      "color": "fdcb6e",
+      "description": "Configuration files and settings"
+    },
+    "scope: container": {
+      "color": "0984e3",
+      "description": "Container-related changes"
+    },
+    "scope: deps": {
+      "color": "636e72",
+      "description": "Dependencies and package updates"
+    },
+    "scope: docker": {
+      "color": "74b9ff",
+      "description": "Docker-specific changes"
+    },
+    "scope: docs": {
+      "color": "0075ca",
+      "description": "Documentation scope"
+    },
+    "scope: nginx": {
+      "color": "00b894",
+      "description": "Nginx-specific changes"
+    },
+    "scope: scripts": {
+      "color": "ffeaa7",
+      "description": "Build and automation scripts"
+    },
+    "scope: security": {
+      "color": "d63031",
+      "description": "Security-related changes"
+    },
+    "scope: test": {
+      "color": "55a3ff",
+      "description": "Testing infrastructure"
+    },
+    "scope: workflow": {
+      "color": "a29bfe",
+      "description": "GitHub Actions workflows"
+    },
+    "good first issue": {
+      "color": "7057ff",
+      "description": "Good for newcomers"
+    },
+    "duplicate": {
+      "color": "cfd3d7",
+      "description": "This issue or pull request already exists"
+    },
+    "invalid": {
+      "color": "e4e669",
+      "description": "This does not seem right"
+    },
+    "wontfix": {
+      "color": "ffffff",
+      "description": "This will not be worked on"
+    },
+    "stale": {
+      "color": "fef2c0",
+      "description": "Issues or PRs that have been inactive for a while"
+    }
+  },
+
+  "conventional_commits": {
+    "feat": {
+      "label": "type: feature",
+      "pattern": "^feat(\\(.+\\))?(!)?:",
+      "priority": 1
+    },
+    "fix": {
+      "label": "type: fix",
+      "pattern": "^fix(\\(.+\\))?(!)?:",
+      "priority": 1
+    },
+    "docs": {
+      "label": "type: docs",
+      "pattern": "^docs(\\(.+\\))?(!)?:",
+      "priority": 2
+    },
+    "style": {
+      "label": "type: style",
+      "pattern": "^style(\\(.+\\))?(!)?:",
+      "priority": 3
+    },
+    "refactor": {
+      "label": "type: refactor",
+      "pattern": "^refactor(\\(.+\\))?(!)?:",
+      "priority": 2
+    },
+    "perf": {
+      "label": "type: performance",
+      "pattern": "^perf(\\(.+\\))?(!)?:",
+      "priority": 2
+    },
+    "test": {
+      "label": "type: test",
+      "pattern": "^test(\\(.+\\))?(!)?:",
+      "priority": 3
+    },
+    "chore": {
+      "label": "type: chore",
+      "pattern": "^chore(\\(.+\\))?(!)?:",
+      "priority": 3
+    },
+    "ci": {
+      "label": "type: ci",
+      "pattern": "^ci(\\(.+\\))?(!)?:",
+      "priority": 3
+    },
+    "build": {
+      "label": "type: build",
+      "pattern": "^build(\\(.+\\))?(!)?:",
+      "priority": 3
+    },
+    "revert": {
+      "label": "type: revert",
+      "pattern": "^revert(\\(.+\\))?(!)?:",
+      "priority": 1
+    }
+  },
+
+  "breaking_changes": {
+    "label": "breaking-change",
+    "patterns": ["!:", "BREAKING CHANGE:", "BREAKING-CHANGE:"],
+    "priority": 1
+  },
+
+  "scopes": {
+    "api": {
+      "label": "scope: api",
+      "priority": 2
+    },
+    "auth": {
+      "label": "scope: auth",
+      "priority": 1
+    },
+    "build": {
+      "label": "scope: build",
+      "priority": 2
+    },
+    "ci": {
+      "label": "scope: ci",
+      "priority": 2
+    },
+    "config": {
+      "label": "scope: config",
+      "priority": 2
+    },
+    "container": {
+      "label": "scope: container",
+      "priority": 2
+    },
+    "deps": {
+      "label": "scope: deps",
+      "priority": 3
+    },
+    "docker": {
+      "label": "scope: docker",
+      "priority": 2
+    },
+    "docs": {
+      "label": "scope: docs",
+      "priority": 3
+    },
+    "nginx": {
+      "label": "scope: nginx",
+      "priority": 2
+    },
+    "scripts": {
+      "label": "scope: scripts",
+      "priority": 2
+    },
+    "security": {
+      "label": "scope: security",
+      "priority": 1
+    },
+    "test": {
+      "label": "scope: test",
+      "priority": 3
+    },
+    "workflow": {
+      "label": "scope: workflow",
+      "priority": 2
+    }
+  }
+}

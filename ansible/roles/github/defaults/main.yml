@@ -45,13 +45,13 @@ github_branch_protection:
 
 # Issue Templates
 github_issue_templates:
-  - name: bug
+  bug:
     enabled: true
-  - name: feature
+  feature:
     enabled: true
-  - name: question
+  question:
     enabled: true
-  - name: config
+  config:
     enabled: true
 
 # GitHub Workflows

@@ -1,0 +1,302 @@
+# SPDX-FileCopyrightText: Copyright (c) {{ github_copyright_year }} {{ github_copyright_holder }}
+#
+# SPDX-License-Identifier: {{ github_license }}
+
+---
+name: {{ github_workflows.mega_linter.name | default("MegaLinter") }}
+on:
+  pull_request:
+    branches: [{{ github_default_branch }}]
+    paths:
+      # Run MegaLinter when any source files change
+      - "**/*.md"
+      - "**/*.yml"
+      - "**/*.yaml"
+      - "**/*.json"
+      - "**/*.sh"
+      - "**/*.bash"
+      - "**/*.dockerfile"
+      - "**/Dockerfile"
+      - ".github/**"
+      - "scripts/**"
+      - "docs/**"
+      - "**/.editorconfig"
+      - "**/.gitignore"
+      - "**/README*"
+      # Always run for config changes
+      - "config/**"
+      - ".mega-linter.yml"
+      - "megalinter-reports/**"
+
+env: # Comment env block if you don't want to apply fixes
+  # Apply linter fixes configuration
+  APPLY_FIXES: all # When active, APPLY_FIXES must also be defined as environment variable (in github/workflows/mega-linter.yml or other CI tool)
+  APPLY_FIXES_EVENT: pull_request # Triggers application of fixes only on pull requests
+  APPLY_FIXES_MODE: pull_request # Fixes are posted in a separate PR for review
+  MEGALINTER_CONFIG: /config/mega-linter.yml
+  MEGALINTER_FLAVOR: cupcake # Move to env for easier management
+
+concurrency:
+  group: ${{ "{{" }} github.ref {{ "}}" }}-${{ "{{" }} github.workflow {{ "}}" }}
+  cancel-in-progress: true
+
+# Workflow-level permissions - minimal by default
+permissions: {}
+
+jobs:
+  megalinter:
+    name: {{ github_workflows.mega_linter.name | default("MegaLinter") }}
+    runs-on: ubuntu-latest
+    # Job-level permissions - minimal set required for the workflow
+    permissions:
+      contents: write # Required: peter-evans/create-pull-request to create branches/commits
+      pull-requests: write # Required: peter-evans/create-pull-request + GITHUB_COMMENT_REPORTER
+      statuses: write # Required: GITHUB_STATUS_REPORTER in MegaLinter config
+      security-events: write # Required: SARIF_REPORTER in MegaLinter config
+      actions: read # Required: ACTION_ACTIONLINT to read workflow files
+    steps:
+      # Git Checkout
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@f4a75cfd619ee5ce8d5b864b0d183aff3c69b55a # v2.13.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout Code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          token: ${{ "{{" }} secrets.AUTOBOT_GITHUB_TOKEN || secrets.GITHUB_TOKEN {{ "}}" }}
+          fetch-depth: 0 # Required for VALIDATE_ALL_CODEBASE and proper git diff analysis
+
+      # Import GPG key for signing commits (conditional on secrets availability)
+      - name: Check GPG secrets availability
+        id: check-gpg
+        run: |
+          if [ -n "${{ "{{" }} secrets.AUTOBOT_GITHUB_GPG_PRIVATE_KEY {{ "}}" }}" ]; then
+            echo "gpg_available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "gpg_available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Import GPG key
+        if: steps.check-gpg.outputs.gpg_available == 'true'
+        uses: crazy-max/ghaction-import-gpg@e89d40939c28e39f97cf32126055eeae86ba74ec # v6.3.0
+        with:
+          gpg_private_key: ${{ "{{" }} secrets.AUTOBOT_GITHUB_GPG_PRIVATE_KEY {{ "}}" }}
+          passphrase: ${{ "{{" }} secrets.AUTOBOT_GITHUB_GPG_PASSPHRASE {{ "}}" }}
+          fingerprint: ${{ "{{" }} secrets.AUTOBOT_GITHUB_GPG_FINGERPRINT {{ "}}" }}
+          git_user_signingkey: true
+          git_commit_gpgsign: true
+          git_config_global: true
+          trust_level: 5
+
+      - name: Configure Git for {{ github_organization }}-autobot
+        run: |
+          git config --global user.name "{{ github_organization }}-autobot"
+          git config --global user.email "{{ github_organization }}-autobot@{{ github_organization }}.com"
+          # Only configure GPG signing if GPG key was imported successfully
+          if [ "${{ "{{" }} steps.check-gpg.outputs.gpg_available {{ "}}" }}" == "true" ]; then
+            echo "✅ GPG signing configured"
+          else
+            echo "⚠️ GPG signing not available - continuing without signing"
+            git config --global commit.gpgsign false
+          fi
+
+      - name: Debug Environment
+        run: |
+          echo "=== Environment Debug ==="
+          echo "Event name: ${{ "{{" }} github.event_name {{ "}}" }}"
+          echo "Ref: ${{ "{{" }} github.ref {{ "}}" }}"
+          echo "GPG available: ${{ "{{" }} steps.check-gpg.outputs.gpg_available {{ "}}" }}"
+          echo "MegaLinter flavor: ${{ "{{" }} env.MEGALINTER_FLAVOR {{ "}}" }}"
+          echo "Config path: ${{ "{{" }} env.MEGALINTER_CONFIG {{ "}}" }}"
+          echo "Working directory: $(pwd)"
+          echo "Git user: $(git config user.name)"
+          echo "Git email: $(git config user.email)"
+
+      # Cache MegaLinter dependencies and previous reports for faster runs
+      - name: Cache MegaLinter
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: |
+            megalinter-reports
+            ~/.cache/megalinter
+            /tmp/lint-results
+          key: megalinter-${{ "{{" }} runner.os {{ "}}" }}-${{ "{{" }} hashFiles('**/*.yml', '**/*.yaml', '**/*.json', '**/*.md', '**/*.sh') {{ "}}" }}
+          restore-keys: |
+            megalinter-${{ "{{" }} runner.os {{ "}}" }}-
+            megalinter-
+
+      # MegaLinter - Flavor controlled by MEGALINTER_FLAVOR env var
+      - name: MegaLinter
+        id: ml
+        # Using base action with MEGALINTER_FLAVOR env var for flexibility
+        # More info at https://megalinter.io/flavors/
+        uses: oxsecurity/megalinter@e08c2b05e3dbc40af4c23f41172ef1e068a7d651 # v8.8.0
+        continue-on-error: false # Let it fail if there are critical issues
+        env:
+          # All available variables are described in documentation
+          # https://megalinter.io/configuration/
+          VALIDATE_ALL_CODEBASE: ${{ "{{" }} github.event_name == 'push' && github.ref == 'refs/heads/{{ github_default_branch }}' {{ "}}" }} # Validates all source when push on main, else just the git diff with main. Override with true if you always want to lint all sources
+          GITHUB_TOKEN: ${{ "{{" }} secrets.AUTOBOT_GITHUB_TOKEN || secrets.GITHUB_TOKEN {{ "}}" }}
+          # ADD YOUR CUSTOM ENV VARIABLES HERE OR DEFINE THEM IN A FILE .mega-linter.yml AT THE ROOT OF YOUR REPOSITORY
+          # DISABLE: COPYPASTE,SPELL # Uncomment to disable copy-paste and spell checks
+
+      # Upload MegaLinter artifacts
+      - name: Archive production artifacts
+        if: success() || failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: MegaLinter reports
+          path: |
+            megalinter-reports
+            mega-linter.log
+
+      # Show MegaLinter summary
+      - name: MegaLinter Summary
+        if: always()
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        env:
+          MEGALINTER_REPORTS_PATH: megalinter-reports
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            try {
+              // Read MegaLinter summary
+              const reportsPath = process.env.MEGALINTER_REPORTS_PATH || 'megalinter-reports';
+              const summaryPath = path.join(reportsPath, 'megalinter-report.json');
+              
+              console.log('🔍 MegaLinter Summary');
+              console.log('===================');
+              
+              if (fs.existsSync(summaryPath)) {
+                const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
+                
+                console.log(`✅ Linters run: ${summary.total_linters || 'N/A'}`);
+                console.log(`❌ Errors found: ${summary.total_errors || 0}`);
+                console.log(`⚠️  Warnings: ${summary.total_warnings || 0}`);
+                console.log(`🔧 Files fixed: ${summary.total_fixed || 0}`);
+                
+                // Create GitHub summary
+                await core.summary
+                  .addHeading('MegaLinter Results')
+                  .addTable([
+                    ['Metric', 'Count'],
+                    ['Linters Run', (summary.total_linters || 'N/A').toString()],
+                    ['Errors', (summary.total_errors || 0).toString()],
+                    ['Warnings', (summary.total_warnings || 0).toString()],
+                    ['Files Fixed', (summary.total_fixed || 0).toString()]
+                  ])
+                  .write();
+              } else {
+                console.log('📄 MegaLinter report not found, checking for log file...');
+                
+                const logPath = 'mega-linter.log';
+                if (fs.existsSync(logPath)) {
+                  console.log('📋 MegaLinter completed - check artifacts for detailed results');
+                  await core.summary
+                    .addHeading('MegaLinter Results')
+                    .addRaw('MegaLinter execution completed. Check the uploaded artifacts for detailed results.')
+                    .write();
+                } else {
+                  console.log('⚠️  No MegaLinter output found');
+                }
+              }
+            } catch (error) {
+              console.log(`❌ Error reading MegaLinter summary: ${error.message}`);
+              await core.summary
+                .addHeading('MegaLinter Results')
+                .addRaw('Error reading MegaLinter results. Check the uploaded artifacts for details.')
+                .write();
+            }
+
+      # Create pull request if applicable (for now works only on PR from same repository, not from forks)
+      - name: Create Pull Request with applied fixes
+        id: cpr
+        if: steps.ml.outputs.has_updated_sources == 1 && (env.APPLY_FIXES_EVENT == 'all' || env.APPLY_FIXES_EVENT == github.event_name) && env.APPLY_FIXES_MODE == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7.0.8
+        with:
+          base: ${{ "{{" }} github.event.pull_request.base.ref {{ "}}" }}
+          branch: megalinter-fixes-${{ "{{" }} github.event.pull_request.number {{ "}}" }}
+          token: ${{ "{{" }} secrets.AUTOBOT_GITHUB_TOKEN || secrets.GITHUB_TOKEN {{ "}}" }}
+          commit-message: |
+            style: apply linter automatic fixes
+
+            Signed-off-by: {{ github_copyright_holder.split('<')[0].strip() }} AutoBot <{{ github_organization }}-autobot@{{ github_organization }}.com>
+          committer: {{ github_copyright_holder.split('<')[0].strip() }} AutoBot <{{ github_organization }}-autobot@{{ github_organization }}.com>
+          author: {{ github_copyright_holder.split('<')[0].strip() }} AutoBot <{{ github_organization }}-autobot@{{ github_organization }}.com>
+          title: "style: apply mega-linter automatic fixes for PR #${{ "{{" }} github.event.pull_request.number {{ "}}" }}"
+          labels: megalinter
+          body: |
+            This PR contains automatic fixes applied by MegaLinter for PR #${{ "{{" }} github.event.pull_request.number {{ "}}" }}.
+
+            **Changes:**
+            - Automatic code formatting fixes
+            - Linter compliance fixes
+
+            **Next Steps:**
+            📋 **Please apply these fixes to your original PR**
+            1. Merge this branch into your original PR branch
+            2. Close this MegaLinter PR
+            3. Continue with your original PR review process
+
+            ⚠️ **Important**: Do not merge this PR directly - apply the fixes to your original PR instead.
+      - name: Comment on original PR
+        if: steps.cpr.outputs.pull-request-number && github.event_name == 'pull_request'
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        continue-on-error: true # Don't fail the workflow if commenting fails
+        env:
+          PR_HEAD_REF: ${{ "{{" }} github.event.pull_request.head.ref {{ "}}" }}
+        with:
+          github-token: ${{ "{{" }} secrets.AUTOBOT_GITHUB_TOKEN || secrets.GITHUB_TOKEN {{ "}}" }}
+          script: |
+            try {
+              const fixPrUrl = "${{ "{{" }} steps.cpr.outputs.pull-request-url {{ "}}" }}";
+              const fixPrNumber = "${{ "{{" }} steps.cpr.outputs.pull-request-number {{ "}}" }}";
+              const originalPrNumber = context.payload.pull_request.number;
+              const prHeadRef = process.env.PR_HEAD_REF;
+              
+              const comment = `## 🤖 MegaLinter Auto-Fix Available
+              
+              Hi @${{ "{{" }} github.event.pull_request.user.login {{ "}}" }}! 👋
+              
+              MegaLinter found some linting issues in your PR and has created an auto-fix PR: **#${fixPrNumber}**
+              
+              ### 📋 Required Action:
+              **Please merge the fixes into your original PR:**
+              \`\`\`bash
+              # Fetch and merge the linter fixes
+              git fetch origin megalinter-fixes-${originalPrNumber}
+              git checkout ${prHeadRef}
+              git merge origin/megalinter-fixes-${originalPrNumber}
+              git push origin ${prHeadRef}
+              \`\`\`
+              
+              After merging the fixes, please close the auto-fix PR #${fixPrNumber}.
+              
+              ### 🔗 Links:
+              - **Auto-fix PR**: ${fixPrUrl}
+              - **MegaLinter Report**: [View artifacts](${{ "{{" }} github.server_url {{ "}}" }}/${{ "{{" }} github.repository {{ "}}" }}/actions/runs/${{ "{{" }} github.run_id {{ "}}" }})
+              
+              ---
+              *This comment was automatically generated by MegaLinter*`;
+              
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: originalPrNumber,
+                body: comment
+              });
+              
+              console.log(`✅ Successfully commented on PR #${originalPrNumber}`);
+            } catch (error) {
+              console.log(`❌ Failed to comment on PR: ${error.message}`);
+              core.setFailed(`Failed to comment on original PR: ${error.message}`);
+            }
+
+      - name: Create PR output
+        if: steps.ml.outputs.has_updated_sources == 1 && (env.APPLY_FIXES_EVENT == 'all' || env.APPLY_FIXES_EVENT == github.event_name) && env.APPLY_FIXES_MODE == 'pull_request' && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository)
+        run: |
+          echo "Pull Request Number - ${{ "{{" }} steps.cpr.outputs.pull-request-number {{ "}}" }}"
+          echo "Pull Request URL - ${{ "{{" }} steps.cpr.outputs.pull-request-url {{ "}}" }}"
