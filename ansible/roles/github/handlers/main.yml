@@ -38,7 +38,7 @@
       delete_branch_on_merge: "{{ github_delete_branch_on_merge }}"
       allow_auto_merge: "{{ github_enable_auto_merge }}"
     status_code: [200]
-  when: 
+  when:
     - github_api_token is defined
     - github_update_repo_settings | default(false)
   listen: "update repo settings"

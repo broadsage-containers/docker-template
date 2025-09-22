@@ -9,7 +9,7 @@
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
-    mode: '0755'
+    mode: "0755"
   loop:
     - "{{ github_project_path }}/.github"
     - "{{ github_project_path }}/.github/workflows"
@@ -22,7 +22,7 @@
   ansible.builtin.template:
     src: ".github/workflows/{{ item }}.yml.j2"
     dest: "{{ github_project_path }}/.github/workflows/{{ item }}.yml"
-    mode: '0644'
+    mode: "0644"
   loop:
     - "commit"
     - "dependabot-auto-merge"
@@ -30,7 +30,7 @@
     - "mega-linter"
     - "label-management"
     - "license"
-    - "pr-publish" 
+    - "pr-publish"
     - "pr-validate"
     - "scorecard-analysis"
     - "stale"
@@ -43,7 +43,7 @@
   ansible.builtin.template:
     src: ".github/ISSUE_TEMPLATE/{{ item }}.yml.j2"
     dest: "{{ github_project_path }}/.github/ISSUE_TEMPLATE/{{ item }}.yml"
-    mode: '0644'
+    mode: "0644"
   loop:
     - "bug"
     - "config"
@@ -58,7 +58,7 @@
   ansible.builtin.template:
     src: ".github/PULL_REQUEST_TEMPLATE.md.j2"
     dest: "{{ github_project_path }}/.github/PULL_REQUEST_TEMPLATE.md"
-    mode: '0644'
+    mode: "0644"
   when: github_file_templates.pull_request_template | default(true)
   tags:
     - github
@@ -68,7 +68,7 @@
   ansible.builtin.template:
     src: ".github/dependabot.yml.j2"
     dest: "{{ github_project_path }}/.github/dependabot.yml"
-    mode: '0644'
+    mode: "0644"
   when: github_dependabot.enabled | default(true)
   tags:
     - github
@@ -78,7 +78,7 @@
   ansible.builtin.template:
     src: ".github/CODEOWNERS.j2"
     dest: "{{ github_project_path }}/.github/CODEOWNERS"
-    mode: '0644'
+    mode: "0644"
   when: github_codeowners is defined and github_codeowners | length > 0
   tags:
     - github
@@ -88,7 +88,7 @@
   ansible.builtin.template:
     src: ".github/auto-label-config.json.j2"
     dest: "{{ github_project_path }}/.github/auto-label-config.json"
-    mode: '0644'
+    mode: "0644"
   when: github_auto_labeling.enabled | default(true)
   tags:
     - github
@@ -98,7 +98,7 @@
   ansible.builtin.template:
     src: "community/{{ item.key | upper }}.md.j2"
     dest: "{{ github_project_path }}/{{ item.key | upper }}.md"
-    mode: '0644'
+    mode: "0644"
   loop: "{{ github_community_files | dict2items }}"
   when: item.value.enabled | default(false)
   tags:
