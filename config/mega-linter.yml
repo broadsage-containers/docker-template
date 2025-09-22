@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage <opensource@broadsage.com>
+# SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage Corporation <containers@broadsage.com>
 #
 # SPDX-License-Identifier: Apache-2.0
 
@@ -51,6 +51,8 @@ BASH_SHFMT_FILE_EXTENSIONS: [.sh]
 BASH_SHELLCHECK_FILE_EXTENSIONS: [.sh]
 PYTHON_PYLINT_FILE_EXTENSIONS: [.py]
 PYTHON_FLAKE8_FILE_EXTENSIONS: [.py]
+PYTHON_FLAKE8_ARGUMENTS: [--max-line-length=100]
+PYTHON_FLAKE8_CONFIG_FILE: NONE
 PYTHON_BLACK_FILE_EXTENSIONS: [.py]
 PYTHON_ISORT_FILE_EXTENSIONS: [.py]
 
