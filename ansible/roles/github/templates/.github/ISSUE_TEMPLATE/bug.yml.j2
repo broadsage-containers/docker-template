@@ -1,0 +1,111 @@
+# SPDX-FileCopyrightText: Copyright (c) {{ github_copyright_year }} {{ github_copyright_holder }}
+#
+# SPDX-License-Identifier: {{ github_license }}
+
+---
+name: 🐛 Bug Report
+description: File a bug report to help us improve
+title: "[BUG]: "
+labels: ["bug", "status:needs-review"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report! 
+        
+        Please search existing issues before creating a new one to avoid duplicates.
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Prerequisites
+      description: By submitting this issue, you agree to follow our Code of Conduct
+      options:
+        - label: I have searched for existing issues that describe my problem
+          required: true
+        - label: I have read the [Code of Conduct](../CODE_OF_CONDUCT.md)
+          required: true
+
+  - type: textarea
+    id: bug-description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is
+      placeholder: Describe the bug...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps-to-reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: Steps to reproduce the behavior
+      placeholder: |
+        1. Go to '...'
+        2. Click on '...'
+        3. Scroll down to '...'
+        4. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected Behavior
+      description: A clear and concise description of what you expected to happen
+      placeholder: What should happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: Actual Behavior
+      description: What actually happened instead?
+      placeholder: What actually happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: |
+        Please provide details about your environment:
+      placeholder: |
+        - OS: [e.g. Ubuntu 22.04, macOS 14.0, Windows 11]
+        - Container Runtime: [e.g. Docker 24.0.6, Podman 4.7.0]
+        - Version: [e.g. 1.2.3]
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: If applicable, add logs to help explain your problem
+      render: shell
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Add any other context about the problem here
+      placeholder: Any additional information that might be helpful...
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How urgent is this bug?
+      options:
+        - Low - Can wait for next release
+        - Medium - Should be fixed soon
+        - High - Blocks important functionality
+        - Critical - Breaks core functionality
+      default: 1
+    validations:
+      required: true

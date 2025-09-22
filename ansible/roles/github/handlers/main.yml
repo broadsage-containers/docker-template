@@ -1,0 +1,47 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage Corporation <containers@broadsage.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+---
+# Handlers file for broadsage.github role
+
+- name: validate github workflows
+  ansible.builtin.shell: |
+    if command -v actionlint >/dev/null 2>&1; then
+      actionlint {{ github_project_path }}/.github/workflows/*.yml
+    else
+      echo "actionlint not available, skipping workflow validation"
+    fi
+  listen: "validate workflows"
+  tags:
+    - github
+    - validation
+
+- name: update repository settings
+  ansible.builtin.uri:
+    url: "https://api.github.com/repos/{{ github_organization }}/{{ github_project_name }}"
+    method: PATCH
+    headers:
+      Authorization: "token {{ github_api_token }}"
+      Accept: "application/vnd.github.v3+json"
+    body_format: json
+    body:
+      name: "{{ github_project_name }}"
+      description: "{{ github_project_description }}"
+      private: "{{ github_visibility != 'public' }}"
+      has_issues: "{{ github_enable_issues }}"
+      has_projects: "{{ github_enable_projects }}"
+      has_wiki: "{{ github_enable_wiki }}"
+      allow_squash_merge: "{{ github_allow_squash_merge }}"
+      allow_merge_commit: "{{ github_allow_merge_commit }}"
+      allow_rebase_merge: "{{ github_allow_rebase_merge }}"
+      delete_branch_on_merge: "{{ github_delete_branch_on_merge }}"
+      allow_auto_merge: "{{ github_enable_auto_merge }}"
+    status_code: [200]
+  when: 
+    - github_api_token is defined
+    - github_update_repo_settings | default(false)
+  listen: "update repo settings"
+  tags:
+    - github
+    - api
