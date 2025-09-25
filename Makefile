@@ -8,10 +8,13 @@
 	@$(MAKE) help
 
 # Makefile to check Docker and Podman installation and provide help
-.PHONY: help check-docker check-podman check-containers check-compliance update-contributors
+.PHONY: help check-docker check-podman check-containers check-compliance update-contributors build
 
 help:
 	@echo "Usage: make <target>"
+	@echo ""
+	@echo "Template Usage:"
+	@echo "  build                	Build the template container image"
 	@echo ""
 	@echo "Quality Assurance Targets:"
 	@echo "  check-compliance     	Run code quality & compliance checks using MegaLinter, FSFE REUSE Compliance, and Conform"
@@ -70,3 +73,16 @@ check-compliance:
 update-contributors:
 	@echo "🔄 Updating contributor statistics..."
 	@python3 scripts/update-contributors.py
+
+# Template targets
+build:
+	@echo "🏗️ Building template container..."
+	@if command -v podman >/dev/null 2>&1; then \
+		podman build -t docker-template .; \
+	elif command -v docker >/dev/null 2>&1; then \
+		docker build -t docker-template .; \
+	else \
+		echo "❌ Error: Neither podman nor docker found"; \
+		exit 1; \
+	fi
+	@echo "✅ Template built successfully"
