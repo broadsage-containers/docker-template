@@ -1,0 +1,74 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage Corporation <containers@broadsage.com>
+# SPDX-License-Identifier: Apache-2.0
+
+---
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "README.md"
+      - "docs/**"
+      - "**.md"
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+# Global permissions
+permissions:
+  contents: read
+
+# Prevent concurrent runs for same PR/branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Code quality and linting (replaces mega-linter.yml)
+  quality-check:
+    name: Code Quality & Linting
+    uses: broadsage-containers/docker-ops/.github/workflows/quality-gate.yml@main
+    secrets: inherit
+
+  # Security analysis (replaces scorecard-analysis.yml) 
+  security-scan:
+    name: Security Analysis
+    uses: broadsage-containers/docker-ops/.github/workflows/security-scorecard.yml@main
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+
+  # Dependency analysis (replaces dependency-review.yml for PRs)
+  dependency-check:
+    name: Dependency Review
+    if: github.event_name == 'pull_request'
+    uses: broadsage-containers/docker-ops/.github/workflows/dependency-review.yml@main
+    secrets: inherit
+
+  # Container build and validation (replaces pr-validate.yml)
+  build-validate:
+    name: Build & Validate Container
+    uses: broadsage-containers/docker-ops/.github/workflows/pr-build-validate.yml@main
+    with:
+      push_image: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    secrets: inherit
+
+  # Container publishing (replaces pr-publish.yml)
+  publish:
+    name: Publish Container
+    needs: [quality-check, security-scan, build-validate]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: broadsage-containers/docker-ops/.github/workflows/pr-build-publish.yml@main
+    with:
+      enable_cosign: true
+      enable_attestations: true
+      enable_sbom: true
+    secrets: inherit
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write

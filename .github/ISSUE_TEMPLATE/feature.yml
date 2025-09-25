@@ -1,0 +1,81 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage Corporation <containers@broadsage.com>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+---
+name: ✨ Feature Request
+description: Suggest a new feature or enhancement
+title: "[Feature]: "
+labels: ["enhancement", "needs-triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a new feature! We appreciate your ideas. 💡
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Prerequisites
+      options:
+        - label: I have read the [Code of Conduct](../CODE_OF_CONDUCT.md)
+          required: true
+        - label: I have searched for existing feature requests
+          required: true
+
+  - type: dropdown
+    id: feature-type
+    attributes:
+      label: Feature Type
+      description: What type of feature is this?
+      options:
+        - New container/application support
+        - Security enhancement
+        - Performance improvement
+        - Documentation improvement
+        - Developer tooling
+        - CI/CD enhancement
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem-description
+    attributes:
+      label: Problem Description
+      description: What problem does this feature solve?
+      placeholder: "Describe the problem or limitation you're experiencing..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed Solution
+      description: What would you like to see implemented?
+      placeholder: "Describe your ideal solution..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternative Solutions
+      description: Have you considered other approaches?
+      placeholder: "Describe any alternative solutions you've considered..."
+
+  - type: textarea
+    id: use-cases
+    attributes:
+      label: Use Cases
+      description: How would this feature be used?
+      placeholder: "Describe specific scenarios where this would be helpful..."
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Any other information that might be relevant
+      placeholder: "Links, screenshots, examples, etc."

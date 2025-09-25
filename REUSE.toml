@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage <opensource@broadsage.com>
+# SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage Corporation <containers@broadsage.com>
 #
 # SPDX-License-Identifier: Apache-2.0
 
@@ -6,28 +6,22 @@ version = 1
 
 # configurations
 [[annotations]]
-path = [".github/PULL_REQUEST_TEMPLATE.md",".commitlintrc.json",".markdownlint.json",".github/auto-label-config.json"]
+path = [".github/CODEOWNERS",".github/PULL_REQUEST_TEMPLATE.md",".github/auto-label-config.json",".commitlintrc.json",".markdownlint.json"]
 precedence = "aggregate"
-SPDX-FileCopyrightText = "Copyright (c) 2025 Broadsage <opensource@broadsage.com>"
+SPDX-FileCopyrightText = "Copyright (c) 2025 Broadsage Corporation <containers@broadsage.com>"
 SPDX-License-Identifier = "Apache-2.0"
 
 # images etc
 [[annotations]]
 path = ["assets/*.png"]
 precedence = "aggregate"
-SPDX-FileCopyrightText = "Copyright (c) 2025 Broadsage <opensource@broadsage.com>"
+SPDX-FileCopyrightText = "Copyright (c) 2025 Broadsage Corporation <containers@broadsage.com>"
 SPDX-License-Identifier = "Apache-2.0"
 
-# bitnami configuration files - using glob patterns
+# Jinja2 template files that contain template variables in SPDX headers
+# These will render proper SPDX compliance when used to generate projects
 [[annotations]]
-path = ["library/**/.bitnami_components.json", "library/**/licenses.txt"]
-precedence = "aggregate"
-SPDX-FileCopyrightText = "Copyright (c) 2025 Broadsage <opensource@broadsage.com>"
-SPDX-License-Identifier = "Apache-2.0"
-
-# bitnami template files - using glob patterns
-[[annotations]]
-path = ["library/**/bitnami-templates/*.tpl"]
-precedence = "aggregate"
-SPDX-FileCopyrightText = "Copyright (c) 2025 Broadsage <opensource@broadsage.com>"
+path = "ansible/roles/**/templates/**/*.j2"
+precedence = "override"
+SPDX-FileCopyrightText = "Copyright (c) 2025 Broadsage Corporation <containers@broadsage.com>"
 SPDX-License-Identifier = "Apache-2.0"

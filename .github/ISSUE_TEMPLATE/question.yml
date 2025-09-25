@@ -1,10 +1,10 @@
-# SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage <opensource@broadsage.com>
+# SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage Corporation <containers@broadsage.com>
 #
 # SPDX-License-Identifier: Apache-2.0
 
 ---
-name: ❓ Question
-description: Ask a question about the project
+name: ❓ Question & Support
+description: Ask a question or get help
 title: "[Question]: "
 labels: ["question", "needs-triage"]
 assignees: []
@@ -13,22 +13,20 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for your question! 🤔
+        Thanks for asking a question! We're here to help. 🤝
 
-        Before asking, please:
-        - Check the documentation and FAQ
-        - Search existing issues and discussions
-        - Consider if this is a bug report or feature request instead
+        **Before asking**: Please check our documentation and existing discussions.
 
   - type: checkboxes
     id: terms
     attributes:
       label: Prerequisites
-      description: By submitting this issue, you agree to follow our Code of Conduct
       options:
-        - label: I have read and agree to the [Code of Conduct](../CODE_OF_CONDUCT.md)
+        - label: I have read the [Code of Conduct](../CODE_OF_CONDUCT.md)
           required: true
-        - label: I have searched the documentation and existing issues
+        - label: I have searched existing issues and discussions
+          required: true
+        - label: I have reviewed the documentation
           required: true
 
   - type: dropdown
@@ -37,14 +35,12 @@ body:
       label: Question Type
       description: What type of question is this?
       options:
+        - Installation/Setup
         - Usage/How-to
         - Configuration
-        - Integration
-        - Best Practices
-        - Architecture/Design
-        - Performance
         - Troubleshooting
-        - Compatibility
+        - Best practices
+        - Development/Contributing
         - Other
     validations:
       required: true
@@ -54,7 +50,7 @@ body:
     attributes:
       label: Your Question
       description: What would you like to know?
-      placeholder: "Please describe your question clearly and provide as much context as possible"
+      placeholder: "Ask your question here..."
     validations:
       required: true
 
@@ -62,23 +58,11 @@ body:
     id: context
     attributes:
       label: Context
-      description: Provide relevant context about your situation
+      description: Any relevant context or background information
       placeholder: |
         - What are you trying to accomplish?
-        - What have you tried so far?
-        - What environment are you working in?
-        - Any relevant configuration or code snippets
-
-  - type: textarea
-    id: research
-    attributes:
-      label: Research Done
-      description: What research have you already done?
-      placeholder: |
-        - Documentation sections checked
-        - Similar issues or discussions found
-        - External resources consulted
-        - Attempts made to solve the problem
+        - What have you already tried?
+        - Any relevant system information?
 
   - type: textarea
     id: additional-info

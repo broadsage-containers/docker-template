@@ -1,309 +1,130 @@
 <!--
-SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage <opensource@broadsage.com>
+SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage Corporation <containers@broadsage.com>
 
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# Broadsage Open Source Containers
+# Docker Template Generator
 
 [![GitHub license](https://img.shields.io/github/license/broadsage/containers)](LICENSE)
 [![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-%23FE5196?logo=conventionalcommits&logoColor=white)](https://conventionalcommits.org)
 [![REUSE compliance](https://img.shields.io/reuse/compliance/github.com%2Fbroadsage%2Fcontainers)](https://reuse.software/)
-[![Security Scanning](https://img.shields.io/badge/security-hardened-green)](SECURITY.md)
+[![Security Scanning](https://img.shields.io/badge/security-hardened-green)](docs/SECURITY.md)
 
-## Enterprise-grade, security-hardened container images for modern applications
+**Generate production-ready, security-hardened container projects with enterprise-grade CI/CD pipelines.**
 
-This open source project provides production-ready, security-focused container images for popular applications and services. Our goal is to create containers that are transparent, maintainable, and suitable for enterprise deployments while remaining community-driven.
-
-## 🎯 Project Mission
-
-Broadsage is committed to fostering open source innovation in the container ecosystem. This initiative provides enterprise-grade alternatives to commercial hardened container solutions:
-
-- **Security-Hardened**: Enterprise-grade security with minimal attack surface and comprehensive hardening
-- **Production-Ready**: Battle-tested containers suitable for mission-critical deployments
-- **Multi-Platform**: Native support for 13 architectures (AMD64, ARM64, RISC-V, PowerPC, s390x, MIPS, LoongArch, and more)
-- **Multi-Application**: Support for web servers, databases, message queues, and application frameworks
-- **CVE-Responsive**: Rapid security updates and vulnerability management
-- **Enterprise-Grade**: Suitable for regulated industries and high-security environments
-- **Community-Driven**: Open development with transparent decision-making and community contributions
-
-## � Supported Containers
-
-We provide enterprise-grade, security-hardened versions of popular applications:
-
-### Web Servers & Reverse Proxies
-
-- **[nginx](library/nginx/)** - High-performance web server and reverse proxy
-- **httpd** - Apache HTTP Server *(coming soon)*
-- **traefik** - Modern reverse proxy and load balancer *(planned)*
-
-### Databases
-
-- **mongodb** - Document-oriented NoSQL database *(coming soon)*
-- **cassandra** - Distributed NoSQL database *(coming soon)*
-- **postgresql** - Advanced open source relational database *(planned)*
-- **mysql** - Popular relational database *(planned)*
-- **redis** - In-memory data structure store *(planned)*
-
-### Application Frameworks
-
-- **node** - JavaScript runtime environment *(planned)*
-- **python** - Python application runtime *(planned)*
-- **openjdk** - Java development kit and runtime *(planned)*
-
-### Message Queues & Streaming
-
-- **rabbitmq** - Message broker *(planned)*
-- **kafka** - Distributed event streaming platform *(planned)*
-
-*Each container includes comprehensive security hardening, performance optimization, and enterprise-ready features.*
+This template generator creates complete container repositories with built-in security, compliance, and automation features - designed to compete with commercial container platforms like Bitnami and Red Hat.
 
 ## 🚀 Quick Start
 
-### Prerequisites
+### 1. Create Your Project Configuration
 
-```bash
-# Verify make is installed
-make --version
+Create a `project.yml` file:
 
-# Verify docker is installed
-docker --version
+```yaml
+---
+organization: "my-company"
+project:
+  name: "my-nginx"
+  description: "Custom NGINX container with security hardening"
+maintainer:
+  name: "Your Name"
+  email: "you@example.com"
 ```
 
-### Common Commands
+### 2. Generate Your Project
+
+Using Docker:
 
 ```bash
-# Show all available commands
-make help
-
-# Build specific containers
-make build CONTAINER=nginx
-make build CONTAINER=mongodb    # when available
-make build CONTAINER=postgresql # when available
-
-# Test containers
-make test CONTAINER=nginx
-make test                       # test all containers
-
-# Development workflow (build + test)
-make dev CONTAINER=nginx
-
-# Full CI pipeline (all containers)
-make ci
-
-# Clean up build artifacts
-make clean
+docker run --rm -v $(pwd):/workspace ghcr.io/broadsage/docker-template
 ```
 
-### Quick Container Usage
+Using Podman:
 
 ```bash
-# NGINX web server
-docker run -p 80:80 ghcr.io/broadsage/nginx:1.29
-
-# MongoDB (example - coming soon)
-docker run -p 27017:27017 ghcr.io/broadsage/mongodb:7.0
-
-# PostgreSQL (example - planned)
-docker run -p 5432:5432 -e POSTGRES_PASSWORD=mypassword ghcr.io/broadsage/postgresql:16
+podman run --rm -v $(pwd):/workspace ghcr.io/broadsage/docker-template
 ```
 
-## 🔐 Enhanced Security Features
+### 3. What You Get
 
-All Broadsage containers are built with enterprise-grade security:
+Your generated project includes:
 
-### **Signature Verification**
+- ✅ **Multi-platform builds** (13+ architectures)
+- ✅ **Security scanning** with Trivy and vulnerability management
+- ✅ **Image signing** with Cosign and SBOM generation
+- ✅ **GitHub Actions** with automated testing and publishing
+- ✅ **Compliance automation** with REUSE, mega-linter, and conventional commits
+- ✅ **Enterprise features** like dependency management and auto-updates
 
-Every production image is cryptographically signed and can be verified:
+## 🏆 Enterprise-Grade Features
 
-```bash
-# Quick verification
-./scripts/verify-image.sh ghcr.io/broadsage/nginx:latest
+### Security & Compliance
 
-# Manual verification with Cosign
-cosign verify ghcr.io/broadsage/nginx:latest \
-  --certificate-identity="https://github.com/broadsage/containers/.github/workflows/release-pipeline.yml@refs/heads/main" \
-  --certificate-oidc-issuer="https://token.actions.githubusercontent.com"
-```
+- **Supply Chain Security**: SLSA attestations, Cosign signing, SBOM generation
+- **Zero CVE Policy**: Automated vulnerability scanning and patching
+- **Compliance Ready**: REUSE, conventional commits, and governance automation
+- **Multi-Architecture**: Native support for AMD64, ARM64, and 11 other platforms
 
-### **Software Bill of Materials (SBOM)**
+### Automation & CI/CD
 
-Download and inspect the complete software inventory:
-
-```bash
-# Download SBOM
-cosign download sbom ghcr.io/broadsage/nginx:latest > nginx-sbom.json
-
-# View package summary
-jq -r '.packages[] | "\(.name): \(.versionInfo)"' nginx-sbom.json | head -10
-```
-
-### **🚦 Verification Requirements**
-
-Image verification is **optional by default** but **highly recommended**:
-
-- ✅ **Development**: Use images directly - `docker run ghcr.io/broadsage/nginx:latest`
-- ⚠️ **Staging**: Optional verification - `./scripts/verify-image.sh <image>`
-- 🔒 **Production**: Mandatory verification via CI/CD or admission controllers
-- 🏛️ **Regulated**: Policy enforcement prevents unsigned images
-
-```bash
-# Make verification mandatory for your environment
-./scripts/enforce-verification.sh k8s-policy      # Kubernetes admission controller
-./scripts/enforce-verification.sh docker-trust   # Docker Content Trust  
-./scripts/enforce-verification.sh ci-pipeline    # CI/CD templates
-```
-
-### **Security Features**
-
-- ✅ **Keyless Signing**: Uses Sigstore for tamper-evident signatures
-- ✅ **Build Provenance**: Complete build metadata and source traceability  
-- ✅ **SBOM Attestation**: Verified software bill of materials
-- ✅ **Vulnerability Scanning**: Automated security scanning with Trivy
-- ✅ **Policy Enforcement**: Kubernetes admission controller policies
-- ✅ **Multi-Platform Signing**: Signatures for all supported architectures
-
-### **Modern Supply Chain Security Stack**
-
-Broadsage containers use a hybrid attestation approach for maximum compatibility:
-
-#### **Dual SBOM Attestation Strategy**
-
-```bash
-# Primary: GitHub Actions native attestation (recommended)
-gh attestation verify oci://ghcr.io/broadsage/nginx:latest --repo broadsage/containers
-
-# Secondary: Cosign universal attestation (broad compatibility)  
-cosign verify-attestation ghcr.io/broadsage/nginx:latest \
-  --type="https://spdx.dev/Document" \
-  --certificate-identity="..." --certificate-oidc-issuer="..."
-```
-
-#### **SBOM Generation with Syft**
-
-We use **Anchore Syft v0.17.2** for modern, accurate SBOM generation:
-
-- **Multiple formats**: SPDX JSON, CycloneDX JSON, Syft native JSON
-- **Comprehensive scanning**: OS packages, language dependencies, container layers
-- **Continuous updates**: Latest vulnerability database integration
-
-#### **SLSA Level 3 Pathway**
-
-Building towards **SLSA Level 3** compliance:
-
-- ✅ **Verified source integrity**: GitHub source attestation
-- ✅ **Build environment isolation**: Hardened GitHub Actions runners
-- ✅ **Complete provenance**: Build metadata and dependency tracking
-- 🔄 **Two-party review**: PR approval and automated verification
-- 🔄 **Hermetic builds**: Reproducible build environment (in progress)
-
-#### **Technology Stack**
-
-- **Signing**: [Sigstore Cosign](https://github.com/sigstore/cosign) (keyless, OIDC-based)
-- **SBOM Generation**: [Anchore Syft](https://github.com/anchore/syft) (modern, multi-format)
-- **Attestation**: [GitHub Actions Attestations](https://docs.github.com/en/actions/security-guides/using-artifact-attestations-to-establish-provenance-for-builds) + Cosign universal compatibility
-- **Verification**: Custom scripts with fallback mechanisms
-- **Vulnerability Scanning**: [Aqua Trivy](https://github.com/aquasecurity/trivy) (comprehensive database)
-
-📖 **Documentation:**
-
-- **[Complete Verification Guide](docs/image-verification.md)** - Detailed verification instructions
-- **[Verification Requirements](docs/verification-requirements.md)** - When verification is needed  
-- **[Security Policy](SECURITY.md)** - Report security issues
-
-## 📁 Project Structure
-
-```bash
-containers/
-├── .github/workflows/     # CI/CD pipelines
-├── library/              # Container definitions
-│   └── nginx/           # NGINX container
-├── scripts/             # Build and utility scripts
-├── Makefile            # 🎯 Build automation
-└── README.md           # This file
-```
-
-## 🛠️ Development
-
-### Build Single Container
-
-```bash
-make build CONTAINER=nginx
-```
-
-### Test Single Container
-
-```bash
-make test CONTAINER=nginx
-```
-
-### Security Scan
-
-```bash
-make security CONTAINER=nginx
-```
-
-### Lint Dockerfiles
-
-```bash
-make lint
-```
-
-## �️ Build System
-
-We use **Make** for build automation:
-
-- ✅ **Cross-platform** - Works on macOS, Linux, Windows
-- ✅ **Simple syntax** - Easy to understand and maintain  
-- ✅ **Standard tooling** - No additional dependencies required
-- ✅ **Proven reliability** - Time-tested build system
-- ✅ **IDE integration** - Built-in support in most editors
+- **Intelligent Workflows**: Multi-stage pipelines with approval gates
+- **Auto-Updates**: Dependabot integration with security prioritization
+- **Quality Gates**: Comprehensive testing, linting, and validation
+- **Release Management**: Semantic versioning and automated releases
 
 ## 📚 Documentation
 
-- [Contributing Guidelines](CONTRIBUTING.md)
-- [Code of Conduct](CODE_OF_CONDUCT.md)
-- [Security Policy](SECURITY.md)
+- **[Development Guide](docs/DEVELOPMENT.md)** - Contributing, workflows, and conventions
+- **[Security Guide](docs/SECURITY.md)** - Image verification, vulnerability management, and security standards
+- **[Contributing Guidelines](CONTRIBUTING.md)** - How to contribute to this project
 
 ## 🤝 Contributing
 
-We welcome contributions from the community! See our [Contributing Guide](CONTRIBUTING.md) for detailed information on how to get started.
+We welcome contributions! See our [Development Guide](docs/DEVELOPMENT.md) for:
 
-### Quick Start for Contributors
+- Branch naming conventions
+- Pull request requirements
+- Auto-labeling system
+- Development workflow
 
-1. **Read the Guidelines**: Start with [CONTRIBUTING.md](CONTRIBUTING.md)
-2. **Check Communication Channels**: See [docs/communication.md](docs/communication.md)
-3. **Follow Our Standards**: Review coding and PR conventions below
-4. **Join the Community**: See our [Communication Guide](docs/communication.md) for all community channels
+### Quick Contributing Steps
 
-### Pull Request Requirements
+1. **Fork** the repository
+2. **Create feature branch**: `feat/your-feature-name`
+3. **Make changes** following our standards
+4. **Submit PR** with conventional title: `feat: add your feature`
 
-All PRs must follow our conventions:
+## 💡 Why Use This Template?
 
-#### Branch Names
+### vs. Manual Setup
 
-Follow our [Branch Naming Guide](./docs/branch_naming.md):
+- **10x Faster**: Generate in minutes, not days
+- **Best Practices**: Enterprise security and compliance built-in
+- **Consistency**: Standardized structure across all projects
 
-```text
-feat/user-authentication
-fix/docker-build-issue
-docs/update-readme
-```
+### vs. Commercial Alternatives
 
-#### PR Titles
+- **Open Source**: Transparent, community-driven development
+- **Full Control**: No vendor lock-in, customize everything
+- **Enterprise-Ready**: Match features of paid solutions
 
-Follow our [Conventional Commits](./docs/CONVENTIONAL_COMMITS.md) format:
+### vs. Basic Templates
 
-```text
-feat: add nginx 1.29 support
-fix(docker): resolve build issue  
-docs: update README
-```
+- **Production-Ready**: Real-world tested with enterprise features
+- **Security-First**: Built-in vulnerability management and signing
+- **Automation**: Complete CI/CD with minimal configuration
 
-**Why?** This enables:
+## 📞 Support
 
-- 🏷️ **Automatic labeling** - PRs get correct labels applied
-- 📋 **Clean history** - Consistent commit messages
-- 🚀 **Automated releases** - Semantic versioning support
+- **Issues**: [Report bugs or request features](https://github.com/broadsage/containers/issues)
+- **Discussions**: [Community support and questions](https://github.com/broadsage/containers/discussions)
+- **Security**: [Report vulnerabilities](docs/SECURITY.md)
 
-**Validation**: The `pr-title-validation` check will guide you if your title doesn't match the required format.
+## 📄 License
+
+This project is licensed under the Apache-2.0 License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+*Built by [Broadsage](https://github.com/broadsage) • Join our mission to democratize enterprise-grade container infrastructure*
