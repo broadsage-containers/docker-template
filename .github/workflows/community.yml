@@ -1,0 +1,26 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 Broadsage Corporation <containers@broadsage.com>
+# SPDX-License-Identifier: Apache-2.0
+
+---
+name: Community Management
+
+on:
+  schedule:
+    # Daily at 02:00 UTC
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+  issues:
+    types: [opened, closed, labeled]
+  pull_request:
+    types: [opened, closed, labeled]
+
+jobs:
+  community-management:
+    name: Community Maintenance
+    uses: broadsage-containers/docker-ops/.github/workflows/community-management.yml@main
+    with:
+      enable_stale_management: true
+      enable_solved_issues: true
+      days_before_stale: 60
+      days_before_close: 7
+    secrets: inherit
