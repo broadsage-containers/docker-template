@@ -21,8 +21,8 @@ permissions:
   contents: read
 
 jobs:
-  community-management:
-    name: Community Maintenance
+  community:
+    name: Community
     uses: broadsage-containers/docker-ops/.github/workflows/community-management.yml@main
     with:
       enable_stale_management: true
